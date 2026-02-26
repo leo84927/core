@@ -15,8 +15,8 @@ type Topology struct {
 	Queues   []Queue  // 對應多個 Queue
 }
 
-func InitTopology(topology Topology) {
-	ch, err := GetConn().Channel()
+func (cm *ConnectionManager) InitTopology(topology Topology) {
+	ch, err := cm.GetConn().Channel()
 	if err != nil {
 		panic(err)
 	}

@@ -8,8 +8,8 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-func Publish(exchange, key string, body []byte) error {
-	ch, err := GetConn().Channel()
+func (cm *ConnectionManager) Publish(exchange, key string, body []byte) error {
+	ch, err := cm.GetConn().Channel()
 	if err != nil {
 		return eris.Wrap(err, "failed to open a channel")
 	}

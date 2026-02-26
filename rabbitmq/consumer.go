@@ -19,9 +19,9 @@ type Message struct {
 
 type MsgHandler func(Message) error
 
-func NewConsumer(queue, tag string) *Consumer {
+func (cm *ConnectionManager) NewConsumer(queue, tag string) *Consumer {
 	// 宣告 channel
-	ch, err := GetConn().Channel()
+	ch, err := cm.GetConn().Channel()
 	if err != nil {
 		log.Println("failed to open a channel:", err.Error())
 		panic(err)
