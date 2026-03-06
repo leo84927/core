@@ -27,6 +27,7 @@ type ConnectionManager struct {
 	Config *Config
 	mutex  sync.RWMutex
 	conn   *amqp.Connection
+	once   sync.Once
 }
 
 func NewConnectionManager(config *Config) *ConnectionManager {
@@ -56,45 +57,64 @@ func (cm *ConnectionManager) SetConnWithRetry() error {
 }
 
 func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
-	closeCh := cm.GetConn().NotifyClose(make(chan *amqp.Error, 1))
+	conn, err := cm.GetConn()
+	if err != nil {
+		log.Println("failed to get connection, err:", err.Error())
+		return err
+	}
+	closeCh := conn.NotifyClose(make(chan *amqp.Error, 1))
 
 	for {
 		select {
 		case <-ctx.Done():
 			log.Println("Stopping WatchConnAndRetry")
 			return nil
-		case err, ok := <-closeCh:
+		case amqpErr, ok := <-closeCh:
 			// 正常關閉
-			if !ok || err == nil {
+			if !ok || amqpErr == nil {
 				log.Println("connection closed")
 				return nil
 			}
 
 			// 異常關閉，開始重試連線
-			log.Println("connection closed, err:", err.Error())
-			if err := cm.SetConnWithRetry(); err != nil {
-				log.Println("failed to reconnect, err:", err.Error())
-				return err
+			log.Println("connection closed, err:", amqpErr.Error())
+			if setConnErr := cm.SetConnWithRetry(); setConnErr != nil {
+				log.Println("failed to reconnect, err:", setConnErr.Error())
+				return setConnErr
 			}
 
-			closeCh = cm.GetConn().NotifyClose(make(chan *amqp.Error, 1))
+			conn, err = cm.GetConn()
+			if err != nil {
+				log.Println("failed to get connection, err:", err.Error())
+				return err
+			}
+			closeCh = conn.NotifyClose(make(chan *amqp.Error, 1))
 		}
 	}
 }
 
-func (cm *ConnectionManager) GetConn() *amqp.Connection {
+func (cm *ConnectionManager) GetConn() (*amqp.Connection, error) {
+	var err error
+	cm.once.Do(func() {
+		// 透過 sync.Once 實現 lazy initialization，之後呼叫 GetConn 就不會再執行 SetConnWithRetry，但呼叫者要持續執行 WatchConnAndRetry 以確保連線可用
+		err = cm.SetConnWithRetry()
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
-
-	if cm.conn == nil {
-		// TODO: 這裡會造成 deadlock，必需修正
-		cm.SetConnWithRetry()
-	}
-	return cm.conn
+	return cm.conn, nil
 }
 
 func (cm *ConnectionManager) Close() {
-	err := cm.GetConn().Close()
+	conn, err := cm.GetConn()
+	if err != nil {
+		panic(err)
+	}
+
+	err = conn.Close()
 	if err != nil {
 		panic(err)
 	}

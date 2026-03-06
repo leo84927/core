@@ -16,7 +16,11 @@ type Topology struct {
 }
 
 func (cm *ConnectionManager) InitTopology(topology Topology) {
-	ch, err := cm.GetConn().Channel()
+	conn, err := cm.GetConn()
+	if err != nil {
+		panic(err)
+	}
+	ch, err := conn.Channel()
 	if err != nil {
 		panic(err)
 	}

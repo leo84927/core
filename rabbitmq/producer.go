@@ -9,7 +9,11 @@ import (
 )
 
 func (cm *ConnectionManager) Publish(exchange, key string, body []byte) error {
-	ch, err := cm.GetConn().Channel()
+	conn, err := cm.GetConn()
+	if err != nil {
+		return eris.Wrap(err, "failed to get connection")
+	}
+	ch, err := conn.Channel()
 	if err != nil {
 		return eris.Wrap(err, "failed to open a channel")
 	}
