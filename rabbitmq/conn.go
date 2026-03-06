@@ -19,8 +19,8 @@ type Config struct {
 	Host           string
 	Port           string
 	Vhost          string
-	MaxElpasedTime time.Duration
-	MaxRetries     uint
+	MaxElpasedTime time.Duration // 總重試時間上限
+	MaxRetries     uint          // 最大重試次數上限
 }
 
 type ConnectionManager struct {
@@ -44,8 +44,8 @@ func (cm *ConnectionManager) SetConnWithRetry() error {
 	conn, err := backoff.Retry(
 		context.Background(),
 		cm.Config.buildConnection,
-		backoff.WithMaxElapsedTime(cm.Config.MaxElpasedTime), // 總重試時間上限
-		backoff.WithMaxTries(cm.Config.MaxRetries),           // 最大重試次數上限
+		backoff.WithMaxElapsedTime(cm.Config.MaxElpasedTime),
+		backoff.WithMaxTries(cm.Config.MaxRetries),
 	)
 	if err != nil {
 		log.Println("SetConnWithRetry failed, err:", err.Error())

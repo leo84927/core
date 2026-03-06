@@ -1,5 +1,14 @@
 package rabbitmq
 
+import (
+	"context"
+	"time"
+
+	"github.com/cenkalti/backoff/v5"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rotisserie/eris"
+)
+
 type Exchange struct {
 	Name string
 	Kind string // direct, fanout, topic, headers
@@ -11,23 +20,43 @@ type Queue struct {
 }
 
 type Topology struct {
-	Exchange Exchange // 一個 Exchange
-	Queues   []Queue  // 對應多個 Queue
+	Exchange       Exchange      // 一個 Exchange
+	Queues         []Queue       // 對應多個 Queue
+	MaxElpasedTime time.Duration // 總重試時間上限
+	MaxRetries     uint          // 最大重試次數上限
 }
 
-func (cm *ConnectionManager) InitTopology(topology Topology) {
-	conn, err := cm.GetConn()
-	if err != nil {
-		panic(err)
-	}
-	ch, err := conn.Channel()
-	if err != nil {
-		panic(err)
-	}
-	defer ch.Close()
+func (cm *ConnectionManager) InitTopology(topology Topology) error {
+	operation := func() (struct{}, error) {
+		conn, err := cm.GetConn()
+		if err != nil {
+			return struct{}{}, eris.Wrap(err, "failed to get connection")
+		}
+		ch, err := conn.Channel()
+		if err != nil {
+			return struct{}{}, eris.Wrap(err, "failed to open a channel")
+		}
+		defer ch.Close()
 
+		if err := cm.declareTopology(ch, topology); err != nil {
+			return struct{}{}, eris.Wrap(err, "failed to declare topology")
+		}
+
+		return struct{}{}, nil
+	}
+
+	_, err := backoff.Retry(
+		context.Background(),
+		operation,
+		backoff.WithMaxElapsedTime(topology.MaxElpasedTime),
+		backoff.WithMaxTries(topology.MaxRetries),
+	)
+	return err
+}
+
+func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology) error {
 	// 一個 Exchange -> 多個 Queue
-	err = ch.ExchangeDeclare(
+	err := ch.ExchangeDeclare(
 		topology.Exchange.Name, // name
 		topology.Exchange.Kind, // direct, fanout, topic, headers
 		true,                   // durable
@@ -37,7 +66,7 @@ func (cm *ConnectionManager) InitTopology(topology Topology) {
 		nil,                    // args
 	)
 	if err != nil {
-		panic(err)
+		return eris.Wrap(err, "failed to declare exchange")
 	}
 
 	// 有幾個 Queue 就 declare 幾次
@@ -51,7 +80,7 @@ func (cm *ConnectionManager) InitTopology(topology Topology) {
 			nil,        // args
 		)
 		if err != nil {
-			panic(err)
+			return eris.Wrapf(err, "failed to declare queue: %s", queue.Name)
 		}
 
 		// 綁定 Exchange 和當前的 Queue
@@ -59,8 +88,10 @@ func (cm *ConnectionManager) InitTopology(topology Topology) {
 			// 有幾個規則就綁定幾次
 			err = ch.QueueBind(queue.Name, key, topology.Exchange.Name, false, nil)
 			if err != nil {
-				panic(err)
+				return eris.Wrapf(err, "failed to bind queue: %s with key: %s", queue.Name, key)
 			}
 		}
 	}
+
+	return nil
 }
