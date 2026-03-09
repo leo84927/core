@@ -9,7 +9,7 @@ import (
 )
 
 func (cm *ConnectionManager) Publish(exchange, key string, body []byte) error {
-	conn, err := cm.GetConn()
+	conn, err := cm.connect()
 	if err != nil {
 		return eris.Wrap(err, "failed to get connection")
 	}

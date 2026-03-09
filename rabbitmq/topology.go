@@ -27,10 +27,11 @@ type Topology struct {
 
 func (cm *ConnectionManager) InitTopology(topology Topology) error {
 	operation := func() (struct{}, error) {
-		conn, err := cm.GetConn()
+		conn, err := cm.connect()
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)
 		}
+
 		ch, err := conn.Channel()
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)

@@ -21,7 +21,7 @@ type MsgHandler func(Message) error
 
 func (cm *ConnectionManager) NewConsumer(queue, tag string) *Consumer {
 	// 宣告 channel
-	conn, err := cm.GetConn()
+	conn, err := cm.connect()
 	if err != nil {
 		log.Println("failed to get connection, err:", err.Error())
 		panic(err)
