@@ -2,12 +2,9 @@ package rabbitmq
 
 import (
 	"context"
-	"crypto/tls"
-	"errors"
 	"fmt"
 	"log"
 	"net"
-	"net/url"
 	"sync"
 	"time"
 
@@ -162,38 +159,7 @@ func (config *Config) buildConnection() (*amqp.Connection, error) {
 		},
 	)
 	if err != nil {
-		// URL 格式錯誤
-		if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
-			return nil, backoff.Permanent(urlErr)
-		}
-
-		// TLS 憑證錯誤
-		if tlsErr := (*tls.CertificateVerificationError)(nil); errors.As(err, &tlsErr) {
-			return nil, backoff.Permanent(tlsErr)
-		}
-
-		// AMQP 連線錯誤
-		if amqpErr := (*amqp.Error)(nil); errors.As(err, &amqpErr) {
-			switch amqpErr.Code {
-			case amqp.AccessRefused, // 帳密錯誤、vhost 無權限
-				amqp.NotAllowed,      // 連線數超過上限、vhost 不允許此操作
-				amqp.InternalError,   // Broker 內部錯誤
-				amqp.FrameError,      // Frame 格式錯誤
-				amqp.SyntaxError,     // 語法錯誤
-				amqp.CommandInvalid,  // 不合法的指令順序
-				amqp.ChannelError,    // Channel 操作在非法狀態下執行
-				amqp.UnexpectedFrame, // 非預期的 frame
-				amqp.ResourceError:   // 資源設定衝突
-				// 不可重試的錯誤，用 backoff.Permanent 包裝後後直接返回
-				return nil, backoff.Permanent(amqpErr)
-			default:
-				// 可重試的錯誤
-				return nil, amqpErr
-			}
-		}
-
-		// 其他可重試的錯誤
-		return nil, err
+		return nil, permanentIfNeeded(err)
 	}
 
 	return conn, nil

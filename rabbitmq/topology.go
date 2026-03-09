@@ -6,7 +6,6 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rotisserie/eris"
 )
 
 type Exchange struct {
@@ -30,16 +29,16 @@ func (cm *ConnectionManager) InitTopology(topology Topology) error {
 	operation := func() (struct{}, error) {
 		conn, err := cm.GetConn()
 		if err != nil {
-			return struct{}{}, eris.Wrap(err, "failed to get connection")
+			return struct{}{}, permanentIfNeeded(err)
 		}
 		ch, err := conn.Channel()
 		if err != nil {
-			return struct{}{}, eris.Wrap(err, "failed to open a channel")
+			return struct{}{}, permanentIfNeeded(err)
 		}
 		defer ch.Close()
 
 		if err := cm.declareTopology(ch, topology); err != nil {
-			return struct{}{}, eris.Wrap(err, "failed to declare topology")
+			return struct{}{}, permanentIfNeeded(err)
 		}
 
 		return struct{}{}, nil
@@ -66,7 +65,7 @@ func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology
 		nil,                    // args
 	)
 	if err != nil {
-		return eris.Wrap(err, "failed to declare exchange")
+		return err
 	}
 
 	// 有幾個 Queue 就 declare 幾次
@@ -80,7 +79,7 @@ func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology
 			nil,        // args
 		)
 		if err != nil {
-			return eris.Wrapf(err, "failed to declare queue: %s", queue.Name)
+			return err
 		}
 
 		// 綁定 Exchange 和當前的 Queue
@@ -88,7 +87,7 @@ func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology
 			// 有幾個規則就綁定幾次
 			err = ch.QueueBind(queue.Name, key, topology.Exchange.Name, false, nil)
 			if err != nil {
-				return eris.Wrapf(err, "failed to bind queue: %s with key: %s", queue.Name, key)
+				return err
 			}
 		}
 	}
