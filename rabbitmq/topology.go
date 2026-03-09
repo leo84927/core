@@ -25,6 +25,7 @@ type Topology struct {
 	MaxRetries     uint          // 最大重試次數上限
 }
 
+// InitTopology：宣告 topology，包含重試邏輯，外部初始化時必須另外呼叫，WatchConnAndRetry 在最一開始不負責初始化 topology
 func (cm *ConnectionManager) InitTopology(topology Topology) error {
 	operation := func() (struct{}, error) {
 		conn, err := cm.connect()
@@ -51,7 +52,14 @@ func (cm *ConnectionManager) InitTopology(topology Topology) error {
 		backoff.WithMaxElapsedTime(topology.MaxElpasedTime),
 		backoff.WithMaxTries(topology.MaxRetries),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// 寫入宣告成功的 topology，重連時 replay
+	cm.topology.Store(&topology)
+
+	return nil
 }
 
 func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology) error {

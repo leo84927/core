@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
@@ -24,9 +25,10 @@ type Config struct {
 }
 
 type ConnectionManager struct {
-	Config *Config
-	mutex  sync.RWMutex
-	conn   *amqp.Connection
+	Config   *Config
+	mutex    sync.RWMutex
+	conn     *amqp.Connection
+	topology atomic.Pointer[Topology]
 }
 
 func NewConnectionManager(config *Config) *ConnectionManager {
@@ -64,6 +66,16 @@ func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
 				return err
 			}
 			closeCh = conn.NotifyClose(make(chan *amqp.Error, 1))
+
+			// 重新宣告 topology
+			topology := cm.topology.Load()
+			if topology != nil {
+				err = cm.InitTopology(*topology)
+				if err != nil {
+					log.Println("failed to declare topology, err:", err.Error())
+					return err
+				}
+			}
 		}
 	}
 }
