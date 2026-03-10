@@ -14,13 +14,12 @@ import (
 // ─────────────────────────────────────────────
 
 type mockChannel struct {
-	closed                 bool
-	exchangeDeclareFunc    func(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error
-	queueDeclareFunc       func(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
-	queueBindFunc          func(name, key, exchange string, noWait bool, args amqp.Table) error
-	publishWithContextFunc func(ctx context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
-	consumeFunc            func(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
-	cancelFunc             func(consumer string, noWait bool) error
+	closed                         bool
+	exchangeDeclareFunc            func(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error
+	queueDeclareFunc               func(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
+	queueBindFunc                  func(name, key, exchange string, noWait bool, args amqp.Table) error
+	confirmFunc                    func(noWait bool) error
+	publishWithDeferredConfirmFunc func(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error)
 }
 
 func (m *mockChannel) ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
@@ -44,13 +43,6 @@ func (m *mockChannel) QueueBind(name, key, exchange string, noWait bool, args am
 	return nil
 }
 
-func (m *mockChannel) Confirm(noWait bool) error {
-	return nil
-}
-
-func (m *mockChannel) PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error) {
-	return nil, nil
-}
 func (m *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
 	return nil, nil
 }

@@ -16,10 +16,14 @@ type AMQPChannel interface {
 	QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
 	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
 	Confirm(noWait bool) error
-	PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error)
+	PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error)
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
 	Cancel(consumer string, noWait bool) error
 	Close() error
+}
+
+type AMQPDeferredConfirmation interface {
+	Wait() bool
 }
 
 type amqpConnection struct {
@@ -28,6 +32,10 @@ type amqpConnection struct {
 
 type amqpChannel struct {
 	*amqp.Channel
+}
+
+type amqpDeferredConfirmation struct {
+	*amqp.DeferredConfirmation
 }
 
 func (c *amqpConnection) IsClosed() bool {
@@ -66,8 +74,12 @@ func (c *amqpChannel) Confirm(noWait bool) error {
 	return c.Channel.Confirm(noWait)
 }
 
-func (c *amqpChannel) PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error) {
-	return c.Channel.PublishWithDeferredConfirm(exchange, key, mandatory, immediate, msg)
+func (c *amqpChannel) PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error) {
+	confirm, err := c.Channel.PublishWithDeferredConfirm(exchange, key, mandatory, immediate, msg)
+	if err != nil {
+		return nil, err
+	}
+	return &amqpDeferredConfirmation{confirm}, nil
 }
 
 func (c *amqpChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
@@ -80,4 +92,8 @@ func (c *amqpChannel) Cancel(consumer string, noWait bool) error {
 
 func (c *amqpChannel) Close() error {
 	return c.Channel.Close()
+}
+
+func (c *amqpDeferredConfirmation) Wait() bool {
+	return c.DeferredConfirmation.Wait()
 }
