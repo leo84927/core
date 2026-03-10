@@ -2,38 +2,55 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/rotisserie/eris"
 )
 
-func (cm *ConnectionManager) Publish(exchange, key string, body []byte) error {
-	conn, err := cm.connect()
-	if err != nil {
-		return eris.Wrap(err, "failed to get connection")
-	}
-	ch, err := conn.Channel()
-	if err != nil {
-		return eris.Wrap(err, "failed to open a channel")
-	}
-	defer ch.Close()
+func (cm *ConnectionManager) PublishWithRetry(exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error {
+	operation := func() (struct{}, error) {
+		conn, err := cm.connect()
+		if err != nil {
+			return struct{}{}, permanentIfNeeded(err)
+		}
+		ch, err := conn.Channel()
+		if err != nil {
+			return struct{}{}, permanentIfNeeded(err)
+		}
+		defer ch.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+		if err := ch.Confirm(false); err != nil {
+			return struct{}{}, permanentIfNeeded(err)
+		}
 
-	err = ch.PublishWithContext(ctx,
-		exchange, // exchange
-		key,      // routing key
-		false,    // mandatory
-		false,    // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(body),
-		})
-	if err != nil {
-		return eris.Wrap(err, "failed to publish message")
+		confirm, err := ch.PublishWithDeferredConfirm(
+			exchange, // exchange
+			key,      // routing key
+			false,    // mandatory
+			false,    // immediate
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        body,
+			},
+		)
+		if err != nil {
+			return struct{}{}, permanentIfNeeded(err)
+		}
+
+		if confirmed := confirm.Wait(); !confirmed {
+			return struct{}{}, errors.New("Publish message failed")
+		}
+
+		return struct{}{}, nil
 	}
 
-	return nil
+	_, err := backoff.Retry(
+		context.Background(),
+		operation,
+		backoff.WithMaxTries(maxRetries),
+		backoff.WithMaxElapsedTime(maxElapsedTime),
+	)
+	return err
 }

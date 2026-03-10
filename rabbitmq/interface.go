@@ -1,8 +1,6 @@
 package rabbitmq
 
 import (
-	"context"
-
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -17,7 +15,8 @@ type AMQPChannel interface {
 	ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error
 	QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error)
 	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
-	PublishWithContext(_ context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
+	Confirm(noWait bool) error
+	PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error)
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
 	Cancel(consumer string, noWait bool) error
 	Close() error
@@ -63,8 +62,12 @@ func (c *amqpChannel) QueueBind(name, key, exchange string, noWait bool, args am
 	return c.Channel.QueueBind(name, key, exchange, noWait, args)
 }
 
-func (c *amqpChannel) PublishWithContext(ctx context.Context, exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error {
-	return c.Channel.PublishWithContext(ctx, exchange, key, mandatory, immediate, msg)
+func (c *amqpChannel) Confirm(noWait bool) error {
+	return c.Channel.Confirm(noWait)
+}
+
+func (c *amqpChannel) PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (*amqp.DeferredConfirmation, error) {
+	return c.Channel.PublishWithDeferredConfirm(exchange, key, mandatory, immediate, msg)
 }
 
 func (c *amqpChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
