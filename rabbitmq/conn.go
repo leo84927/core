@@ -24,17 +24,35 @@ type Config struct {
 	MaxRetries     uint          // 最大重試次數上限
 }
 
+// AMQPConnection 抽象 amqp.Connection，方便測試時替換成 mock
+type AMQPConnection interface {
+	IsClosed() bool
+	Close() error
+	NotifyClose(c chan *amqp.Error) chan *amqp.Error
+	Channel() (*amqp.Channel, error)
+}
+
 type ConnectionManager struct {
 	Config   *Config
 	mutex    sync.RWMutex
-	conn     *amqp.Connection
+	conn     AMQPConnection
 	topology atomic.Pointer[Topology]
+
+	// 允許在測試時替換建立連線的函式
+	dialFunc func() (AMQPConnection, error)
 }
 
 func NewConnectionManager(config *Config) *ConnectionManager {
-	return &ConnectionManager{
+	cm := &ConnectionManager{
 		Config: config,
 	}
+
+	// 預設使用真實連線
+	cm.dialFunc = func() (AMQPConnection, error) {
+		return config.buildConnection()
+	}
+
+	return cm
 }
 
 func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
@@ -95,7 +113,7 @@ func (cm *ConnectionManager) Close() {
 }
 
 // connect：明確建立連線（含 lazy 語意）
-func (cm *ConnectionManager) connect() (*amqp.Connection, error) {
+func (cm *ConnectionManager) connect() (AMQPConnection, error) {
 	// 先檢查連線是否存在
 	cm.mutex.RLock()
 	if cm.conn != nil && !cm.conn.IsClosed() {
@@ -125,7 +143,7 @@ func (cm *ConnectionManager) connect() (*amqp.Connection, error) {
 }
 
 // getConn：純粹取得連線，不負責重連
-func (cm *ConnectionManager) getConn() (*amqp.Connection, error) {
+func (cm *ConnectionManager) getConn() (AMQPConnection, error) {
 	cm.mutex.RLock()
 	defer cm.mutex.RUnlock()
 
@@ -143,7 +161,7 @@ func (cm *ConnectionManager) getConn() (*amqp.Connection, error) {
 func (cm *ConnectionManager) setConnWithRetry() error {
 	conn, err := backoff.Retry(
 		context.Background(),
-		cm.Config.buildConnection,
+		cm.dialFunc,
 		backoff.WithMaxElapsedTime(cm.Config.MaxElpasedTime),
 		backoff.WithMaxTries(cm.Config.MaxRetries),
 	)
