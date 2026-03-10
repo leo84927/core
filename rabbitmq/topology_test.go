@@ -298,3 +298,145 @@ func TestDeclareTopology_ChannelClosedAfterFailure(t *testing.T) {
 		t.Fatal("expected channel to be closed even after failure")
 	}
 }
+
+// ─────────────────────────────────────────────
+// Tests: WatchConnAndRetry topology replay
+// ─────────────────────────────────────────────
+
+// 異常斷線重連後，有 topology → 應自動 replay
+func TestWatchConnAndRetry_ReplayTopologyAfterReconnect(t *testing.T) {
+	firstMock := newMockConn()
+	secondMock := newMockConn()
+	callCount := 0
+
+	// 記錄 ExchangeDeclare 是否被呼叫，用來確認 replay 有執行
+	exchangeDeclareCount := 0
+	secondMock.channelFunc = func() (AMQPChannel, error) {
+		return &mockChannel{
+			exchangeDeclareFunc: func(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
+				exchangeDeclareCount++
+				return nil
+			},
+		}, nil
+	}
+
+	cm := newTestConnectionManager()
+	cm.dialFunc = func() (AMQPConnection, error) {
+		callCount++
+		if callCount == 1 {
+			return firstMock, nil
+		}
+		return secondMock, nil
+	}
+
+	// 預先存入 topology，模擬已經呼叫過 InitTopology
+	topology := newTestTopology()
+	cm.topology.Store(&topology)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- cm.WatchConnAndRetry(ctx) }()
+
+	// 確保 WatchConnAndRetry 已開始監聽 firstMock 的 closeCh
+	time.Sleep(100 * time.Millisecond)
+	firstMock.simulateUnexpectedClose(320, "connection reset")
+
+	// 確保重連和 replay 都完成後再 cancel
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil after reconnect and replay, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not return after cancel")
+	}
+
+	if exchangeDeclareCount == 0 {
+		t.Fatal("expected topology to be replayed after reconnect, but ExchangeDeclare was not called")
+	}
+}
+
+// 異常斷線重連後，replay 失敗 → WatchConnAndRetry 應回傳 error
+func TestWatchConnAndRetry_ReplayTopologyFails(t *testing.T) {
+	firstMock := newMockConn()
+	secondMock := newMockConn()
+	callCount := 0
+
+	secondMock.channelFunc = func() (AMQPChannel, error) {
+		return &mockChannel{
+			exchangeDeclareFunc: func(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
+				return errors.New("exchange declare failed")
+			},
+		}, nil
+	}
+
+	cm := newTestConnectionManager()
+	cm.dialFunc = func() (AMQPConnection, error) {
+		callCount++
+		if callCount == 1 {
+			return firstMock, nil
+		}
+		return secondMock, nil
+	}
+
+	topology := newTestTopology()
+	cm.topology.Store(&topology)
+
+	done := make(chan error, 1)
+	go func() { done <- cm.WatchConnAndRetry(context.Background()) }()
+
+	time.Sleep(100 * time.Millisecond)
+	firstMock.simulateUnexpectedClose(320, "connection reset")
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error when topology replay fails")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not return after replay failure")
+	}
+}
+
+// 異常斷線重連後，沒有 topology → 不應嘗試 replay，正常繼續監聽
+func TestWatchConnAndRetry_NoTopologyNoReplay(t *testing.T) {
+	firstMock := newMockConn()
+	secondMock := newMockConn()
+	callCount := 0
+
+	// secondMock 故意不設 channelFunc
+	// 如果有嘗試 replay，Channel() 會回傳 "not implemented" error
+	// WatchConnAndRetry 就會回傳 error，cancel() 後的 nil 檢查就會失敗
+	cm := newTestConnectionManager()
+	cm.dialFunc = func() (AMQPConnection, error) {
+		callCount++
+		if callCount == 1 {
+			return firstMock, nil
+		}
+		return secondMock, nil
+	}
+
+	// 不存入 topology，cm.topology.Load() 會回傳 nil
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- cm.WatchConnAndRetry(ctx) }()
+
+	time.Sleep(100 * time.Millisecond)
+	firstMock.simulateUnexpectedClose(320, "connection reset")
+
+	// 給重連時間完成，確認沒有觸發 replay
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil when no topology, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not return after cancel")
+	}
+}
