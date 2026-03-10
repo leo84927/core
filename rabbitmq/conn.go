@@ -24,14 +24,6 @@ type Config struct {
 	MaxRetries     uint          // 最大重試次數上限
 }
 
-// AMQPConnection 抽象 amqp.Connection，方便測試時替換成 mock
-type AMQPConnection interface {
-	IsClosed() bool
-	Close() error
-	NotifyClose(c chan *amqp.Error) chan *amqp.Error
-	Channel() (*amqp.Channel, error)
-}
-
 type ConnectionManager struct {
 	Config   *Config
 	mutex    sync.RWMutex
@@ -49,7 +41,12 @@ func NewConnectionManager(config *Config) *ConnectionManager {
 
 	// 預設使用真實連線
 	cm.dialFunc = func() (AMQPConnection, error) {
-		return config.buildConnection()
+		conn, err := config.buildConnection()
+		if err != nil {
+			return nil, err
+		}
+
+		return &amqpConnection{conn}, nil
 	}
 
 	return cm

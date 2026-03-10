@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Exchange struct {
@@ -62,7 +61,7 @@ func (cm *ConnectionManager) InitTopology(topology Topology) error {
 	return nil
 }
 
-func (cm *ConnectionManager) declareTopology(ch *amqp.Channel, topology Topology) error {
+func (cm *ConnectionManager) declareTopology(ch AMQPChannel, topology Topology) error {
 	// 一個 Exchange -> 多個 Queue
 	err := ch.ExchangeDeclare(
 		topology.Exchange.Name, // name

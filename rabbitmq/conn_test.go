@@ -11,9 +11,10 @@ import (
 )
 
 type mockConn struct {
-	mu      sync.Mutex
-	closed  bool
-	closeCh chan *amqp.Error
+	mu          sync.Mutex
+	closed      bool
+	closeCh     chan *amqp.Error
+	channelFunc func() (AMQPChannel, error)
 }
 
 func (m *mockConn) IsClosed() bool {
@@ -36,7 +37,10 @@ func (m *mockConn) NotifyClose(c chan *amqp.Error) chan *amqp.Error {
 	return c
 }
 
-func (m *mockConn) Channel() (*amqp.Channel, error) {
+func (m *mockConn) Channel() (AMQPChannel, error) {
+	if m.channelFunc != nil {
+		return m.channelFunc()
+	}
 	return nil, errors.New("not implemented")
 }
 
@@ -287,39 +291,39 @@ func TestWatchConnAndRetry_UnexpectedClose_ReconnectFails(t *testing.T) {
 }
 
 func TestWatchConnAndRetry_UnexpectedClose_ReconnectSucceeds(t *testing.T) {
-    firstMock := newMockConn()
-    secondMock := newMockConn()
-    callCount := 0
+	firstMock := newMockConn()
+	secondMock := newMockConn()
+	callCount := 0
 
-    cm := newTestConnectionManager()
-    cm.dialFunc = func() (AMQPConnection, error) {
-        callCount++
-        if callCount == 1 {
-            return firstMock, nil  // 第一次連線成功
-        }
-        return secondMock, nil     // 重連也成功
-    }
+	cm := newTestConnectionManager()
+	cm.dialFunc = func() (AMQPConnection, error) {
+		callCount++
+		if callCount == 1 {
+			return firstMock, nil // 第一次連線成功
+		}
+		return secondMock, nil // 重連也成功
+	}
 
-    ctx, cancel := context.WithCancel(context.Background())
-    done := make(chan error, 1)
-    go func() { done <- cm.WatchConnAndRetry(ctx) }()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- cm.WatchConnAndRetry(ctx) }()
 
 	// 在觸發異常斷線前，確保 WatchConnAndRetry 已開始監聽 firstMock 的 closeCh
-    time.Sleep(100 * time.Millisecond)
-    firstMock.simulateUnexpectedClose(320, "connection reset")
+	time.Sleep(100 * time.Millisecond)
+	firstMock.simulateUnexpectedClose(320, "connection reset")
 
 	// 在正常關閉前，確保 WatchConnAndRetry 已成功重連並監聽 secondMock 的 closeCh
-    time.Sleep(100 * time.Millisecond)
-    cancel()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
 
-    select {
-    case err := <-done:
-        if err != nil {
-            t.Fatalf("expected nil after reconnect and cancel, got: %v", err)
-        }
-    case <-time.After(5 * time.Second):
-        t.Fatal("did not return after cancel")
-    }
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil after reconnect and cancel, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not return after cancel")
+	}
 }
 
 // ─────────────────────────────────────────────

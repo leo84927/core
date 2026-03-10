@@ -8,7 +8,7 @@ import (
 )
 
 type Consumer struct {
-	ch   *amqp.Channel
+	ch   AMQPChannel
 	msgs <-chan amqp.Delivery
 	tag  string
 }
