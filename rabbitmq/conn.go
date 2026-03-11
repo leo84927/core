@@ -20,8 +20,8 @@ type Config struct {
 	Host           string
 	Port           string
 	Vhost          string
-	MaxElpasedTime time.Duration // 總重試時間上限
 	MaxRetries     uint          // 最大重試次數上限
+	MaxElpasedTime time.Duration // 總重試時間上限
 }
 
 type ConnectionManager struct {

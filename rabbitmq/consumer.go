@@ -2,15 +2,20 @@ package rabbitmq
 
 import (
 	"context"
+	"errors"
 	"log"
+	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Consumer struct {
-	ch   AMQPChannel
-	msgs <-chan amqp.Delivery
-	tag  string
+	cm             *ConnectionManager
+	queue          string
+	tag            string
+	MaxRetries     uint          // 最大重試次數上限
+	MaxElpasedTime time.Duration // 總重試時間上限
 }
 
 type Message struct {
@@ -19,23 +24,50 @@ type Message struct {
 
 type MsgHandler func(Message) error
 
-func (cm *ConnectionManager) NewConsumer(queue, tag string) *Consumer {
-	// 宣告 channel
-	conn, err := cm.connect()
+func (cm *ConnectionManager) NewConsumer(queue, tag string, maxRetries uint, maxElpasedTime time.Duration) *Consumer {
+	// 不在這裡建立 channel，延遲到 consume 時才建
+	return &Consumer{
+		cm:             cm,
+		queue:          queue,
+		tag:            tag,
+		MaxRetries:     maxRetries,
+		MaxElpasedTime: maxElpasedTime,
+	}
+}
+
+func (c *Consumer) WaitForConsume(ctx context.Context, handler MsgHandler) error {
+	operation := func() (struct{}, error) {
+		err := c.subscribeAndWait(ctx, handler)
+		return struct{}{}, permanentIfNeeded(err)
+	}
+
+	_, err := backoff.Retry(
+		ctx,
+		operation,
+		backoff.WithMaxTries(c.MaxRetries),
+		backoff.WithMaxElapsedTime(c.MaxElpasedTime),
+	)
+	return err
+}
+
+func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) error {
+	conn, err := c.cm.connect()
 	if err != nil {
 		log.Println("failed to get connection, err:", err.Error())
-		panic(err)
+		return err
 	}
+
 	ch, err := conn.Channel()
 	if err != nil {
 		log.Println("failed to open a channel:", err.Error())
-		panic(err)
+		return err
 	}
+	defer ch.Close()
 
 	// 訂閱 queue
 	msgs, err := ch.Consume(
-		queue,
-		tag,   // consumer tag（用來識別 consumer，同一 channel 內不可重複，但不同 channel 可以重複）
+		c.queue,
+		c.tag, // consumer tag（用來識別 consumer，同一 channel 內不可重複，但不同 channel 可以重複）
 		false, // autoAck（true 代表自動 ack，當 rabbitmq 收到 ack 代表訊息已處理完畢，訊息會被刪除）
 		false, // exclusive（是否排他，若為 true 則該 queue 只能被一個 consumer 消費）
 		false, // noLocal（是否禁止將訊息發回給同一連線的 producer）
@@ -44,41 +76,25 @@ func (cm *ConnectionManager) NewConsumer(queue, tag string) *Consumer {
 	)
 	if err != nil {
 		log.Println("failed to register a consumer:", err.Error())
-		ch.Close()
-		panic(err)
+		return err
 	}
-
-	return &Consumer{
-		ch:   ch,
-		msgs: msgs,
-		tag:  tag,
-	}
-}
-
-func (c *Consumer) WaitForConsume(ctx context.Context, handler MsgHandler) {
-	defer c.cleanup()
 
 	for {
 		select {
-		case d, ok := <-c.msgs:
-			// 當連線異常時，ok 會是 false，此時關閉 consumer
+		case d, ok := <-msgs:
 			if !ok {
+				// 當連線異常時，ok 會是 false，此時停止 consumer 並讓外層重試
 				log.Println("channel closed, exiting consumer")
-				return
+				return errors.New("channel closed")
 			}
 
 			c.handleDelivery(d, handler)
 
 		case <-ctx.Done():
 			log.Println("context cancelled, shutting down consumer")
-			return
+			return nil
 		}
 	}
-}
-
-func (c *Consumer) cleanup() {
-	c.ch.Cancel(c.tag, false)
-	c.ch.Close()
 }
 
 func (c *Consumer) handleDelivery(d amqp.Delivery, handler MsgHandler) {
