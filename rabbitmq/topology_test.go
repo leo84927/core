@@ -43,6 +43,10 @@ func (m *mockChannel) QueueBind(name, key, exchange string, noWait bool, args am
 	return nil
 }
 
+func (m *mockChannel) Qos(prefetchCount, prefetchSize int, global bool) error {
+	return nil
+}
+
 func (m *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
 	return nil, nil
 }

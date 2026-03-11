@@ -17,6 +17,7 @@ type AMQPChannel interface {
 	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
 	Confirm(noWait bool) error
 	PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error)
+	Qos(prefetchCount, prefetchSize int, global bool) error
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
 	Cancel(consumer string, noWait bool) error
 	Close() error
@@ -38,6 +39,10 @@ type amqpDeferredConfirmation struct {
 	*amqp.DeferredConfirmation
 }
 
+// ─────────────────────────────────────────────
+// Connection
+// ─────────────────────────────────────────────
+
 func (c *amqpConnection) IsClosed() bool {
 	return c.Connection.IsClosed()
 }
@@ -58,6 +63,10 @@ func (c *amqpConnection) Channel() (AMQPChannel, error) {
 	return &amqpChannel{ch}, nil
 }
 
+// ─────────────────────────────────────────────
+// Topology
+// ─────────────────────────────────────────────
+
 func (c *amqpChannel) ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
 	return c.Channel.ExchangeDeclare(name, kind, durable, autoDelete, internal, noWait, args)
 }
@@ -69,6 +78,10 @@ func (c *amqpChannel) QueueDeclare(name string, durable, autoDelete, exclusive, 
 func (c *amqpChannel) QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error {
 	return c.Channel.QueueBind(name, key, exchange, noWait, args)
 }
+
+// ─────────────────────────────────────────────
+// Producer
+// ─────────────────────────────────────────────
 
 func (c *amqpChannel) Confirm(noWait bool) error {
 	return c.Channel.Confirm(noWait)
@@ -82,9 +95,25 @@ func (c *amqpChannel) PublishWithDeferredConfirm(exchange, key string, mandatory
 	return &amqpDeferredConfirmation{confirm}, nil
 }
 
+func (c *amqpDeferredConfirmation) Wait() bool {
+	return c.DeferredConfirmation.Wait()
+}
+
+// ─────────────────────────────────────────────
+// Consumer
+// ─────────────────────────────────────────────
+
+func (c *amqpChannel) Qos(prefetchCount, prefetchSize int, global bool) error {
+	return c.Channel.Qos(prefetchCount, prefetchSize, global)
+}
+
 func (c *amqpChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
 	return c.Channel.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
 }
+
+// ─────────────────────────────────────────────
+// Cancel & Close
+// ─────────────────────────────────────────────
 
 func (c *amqpChannel) Cancel(consumer string, noWait bool) error {
 	return c.Channel.Cancel(consumer, noWait)
@@ -92,8 +121,4 @@ func (c *amqpChannel) Cancel(consumer string, noWait bool) error {
 
 func (c *amqpChannel) Close() error {
 	return c.Channel.Close()
-}
-
-func (c *amqpDeferredConfirmation) Wait() bool {
-	return c.DeferredConfirmation.Wait()
 }

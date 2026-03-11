@@ -64,6 +64,17 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	}
 	defer ch.Close()
 
+	// 限制未確認消息數量，避免消費者一次拿太多消息導致記憶體不足
+	err = ch.Qos(
+		1,     // 預取數量。定義消費者在未發送 Ack 之前，最多能持有的「未確認消息」數量。
+		0,     // 預取大小（單位：Byte）。定義伺服器可發送的未確認消息總內容大小。0 代表不限制。
+		false, // true：對與該 channel 相同 connection 的所有 channel 生效。false：僅對當前 channel 生效。
+	)
+	if err != nil {
+		log.Println("failed to set QoS:", err.Error())
+		return err
+	}
+
 	// 訂閱 queue
 	msgs, err := ch.Consume(
 		c.queue,
