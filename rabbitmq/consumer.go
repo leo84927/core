@@ -22,7 +22,7 @@ type Message struct {
 	Body []byte
 }
 
-type MsgHandler func(Message) error
+type MsgHandler func(Message) (requeue bool, err error)
 
 func (cm *ConnectionManager) NewConsumer(queue, tag string, maxRetries uint, maxElpasedTime time.Duration) *Consumer {
 	// 不在這裡建立 channel，延遲到 consume 時才建
@@ -120,10 +120,10 @@ func (c *Consumer) handleDelivery(d amqp.Delivery, handler MsgHandler) {
 	 * requeue：是否重新入隊，true 代表重新入隊，false 代表丟棄
 	 * 若為可重試的錯誤（例如網路異常），建議 requeue，若為不可重試的錯誤則建議丟棄
 	 */
-	if err := handler(msg); err != nil {
+	if requeue, err := handler(msg); err != nil {
 		log.Println("failed to handle message:", err.Error())
 
-		if err := d.Nack(false, true); err != nil {
+		if err := d.Nack(false, requeue); err != nil {
 			log.Println("failed to nack message:", err.Error())
 		}
 
