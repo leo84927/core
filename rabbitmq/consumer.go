@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type Consumer struct {
@@ -99,7 +98,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 				return errors.New("channel closed")
 			}
 
-			c.handleDelivery(d, handler)
+			c.handleDelivery(&amqpDelivery{&d}, Message{Body: d.Body}, handler)
 
 		case <-ctx.Done():
 			log.Println("context cancelled, shutting down consumer")
@@ -108,11 +107,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	}
 }
 
-func (c *Consumer) handleDelivery(d amqp.Delivery, handler MsgHandler) {
-	msg := Message{
-		Body: d.Body,
-	}
-
+func (c *Consumer) handleDelivery(d AMQPDelivery, msg Message, handler MsgHandler) {
 	/**
 	 * Nack 代表訊息處理失敗
 	 * multiple：是否批次確認，true 代表確認該訊息以及之前的訊息，false 代表只確認該訊息

@@ -20,6 +20,8 @@ type mockChannel struct {
 	queueBindFunc                  func(name, key, exchange string, noWait bool, args amqp.Table) error
 	confirmFunc                    func(noWait bool) error
 	publishWithDeferredConfirmFunc func(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error)
+	consumeFunc                    func(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
+	qosFunc                        func(prefetchCount, prefetchSize int, global bool) error
 }
 
 func (m *mockChannel) ExchangeDeclare(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
@@ -43,13 +45,6 @@ func (m *mockChannel) QueueBind(name, key, exchange string, noWait bool, args am
 	return nil
 }
 
-func (m *mockChannel) Qos(prefetchCount, prefetchSize int, global bool) error {
-	return nil
-}
-
-func (m *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
-	return nil, nil
-}
 func (m *mockChannel) Cancel(consumer string, noWait bool) error {
 	return nil
 }

@@ -27,6 +27,11 @@ type AMQPDeferredConfirmation interface {
 	Wait() bool
 }
 
+type AMQPDelivery interface {
+	Ack(multiple bool) error
+	Nack(multiple bool, requeue bool) error
+}
+
 type amqpConnection struct {
 	*amqp.Connection
 }
@@ -37,6 +42,10 @@ type amqpChannel struct {
 
 type amqpDeferredConfirmation struct {
 	*amqp.DeferredConfirmation
+}
+
+type amqpDelivery struct {
+	*amqp.Delivery
 }
 
 // ─────────────────────────────────────────────
@@ -109,6 +118,14 @@ func (c *amqpChannel) Qos(prefetchCount, prefetchSize int, global bool) error {
 
 func (c *amqpChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
 	return c.Channel.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
+}
+
+func (d *amqpDelivery) Ack(multiple bool) error {
+	return d.Delivery.Ack(multiple)
+}
+
+func (d *amqpDelivery) Nack(multiple bool, requeue bool) error {
+	return d.Delivery.Nack(multiple, requeue)
 }
 
 // ─────────────────────────────────────────────
