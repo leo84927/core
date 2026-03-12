@@ -79,7 +79,7 @@ func TestWaitForConsume_ConnectFails(t *testing.T) {
 	cm := newTestConnectionManager() // conn 為 nil，沒有 broker
 
 	consumer := newTestConsumer(cm)
-	err := consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -99,7 +99,7 @@ func TestWaitForConsume_ChannelFails(t *testing.T) {
 	cm.conn = mock
 
 	consumer := newTestConsumer(cm)
-	err := consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -120,7 +120,7 @@ func TestWaitForConsume_QosFails(t *testing.T) {
 	cm.conn = newMockConnWithChannel(ch)
 
 	consumer := newTestConsumer(cm)
-	err := consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -141,7 +141,7 @@ func TestWaitForConsume_ConsumeFails(t *testing.T) {
 	cm.conn = newMockConnWithChannel(ch)
 
 	consumer := newTestConsumer(cm)
-	err := consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -163,7 +163,7 @@ func TestWaitForConsume_MsgsChannelClosed(t *testing.T) {
 	cm.conn = newMockConnWithChannel(ch)
 
 	consumer := newTestConsumer(cm)
-	err := consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -191,7 +191,7 @@ func TestWaitForConsume_ContextCancel(t *testing.T) {
 
 	consumer := newTestConsumer(cm)
 	go func() {
-		done <- consumer.WaitForConsume(ctx, func(msg Message) (bool, error) {
+		done <- consumer.WaitForConsume(ctx, func(ctx context.Context, msg Message) (bool, error) {
 			return false, nil
 		})
 	}()
@@ -222,7 +222,7 @@ func TestWaitForConsume_ChannelClosedAfterDone(t *testing.T) {
 	cm.conn = newMockConnWithChannel(ch)
 
 	consumer := newTestConsumer(cm)
-	consumer.WaitForConsume(context.Background(), func(msg Message) (bool, error) {
+	consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -241,7 +241,7 @@ func TestHandleDelivery_HandlerSuccess_CallsAck(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(d, Message{Body: []byte("hello")}, func(msg Message) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message) (bool, error) {
 		return false, nil
 	})
 
@@ -259,7 +259,7 @@ func TestHandleDelivery_HandlerFails_Requeue(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(d, Message{Body: []byte("hello")}, func(msg Message) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message) (bool, error) {
 		return true, errors.New("handler failed")
 	})
 
@@ -280,7 +280,7 @@ func TestHandleDelivery_HandlerFails_NoRequeue(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(d, Message{Body: []byte("hello")}, func(msg Message) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message) (bool, error) {
 		return false, errors.New("handler failed")
 	})
 
@@ -299,7 +299,7 @@ func TestHandleDelivery_PassesCorrectBody(t *testing.T) {
 	consumer := newTestConsumer(cm)
 
 	var receivedBody []byte
-	consumer.handleDelivery(d, Message{Body: []byte("test-body")}, func(msg Message) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("test-body")}, func(ctx context.Context, msg Message) (bool, error) {
 		receivedBody = msg.Body
 		return false, nil
 	})

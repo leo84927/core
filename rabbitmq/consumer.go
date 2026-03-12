@@ -21,7 +21,7 @@ type Message struct {
 	Body []byte
 }
 
-type MsgHandler func(Message) (requeue bool, err error)
+type MsgHandler func(context.Context, Message) (requeue bool, err error)
 
 func (cm *ConnectionManager) NewConsumer(queue, tag string, maxRetries uint, maxElpasedTime time.Duration) *Consumer {
 	// 不在這裡建立 channel，延遲到 consume 時才建
@@ -98,7 +98,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 				return errors.New("channel closed")
 			}
 
-			c.handleDelivery(&amqpDelivery{&d}, Message{Body: d.Body}, handler)
+			c.handleDelivery(ctx, &amqpDelivery{&d}, Message{Body: d.Body}, handler)
 
 		case <-ctx.Done():
 			log.Println("context cancelled, shutting down consumer")
@@ -107,7 +107,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	}
 }
 
-func (c *Consumer) handleDelivery(d AMQPDelivery, msg Message, handler MsgHandler) {
+func (c *Consumer) handleDelivery(ctx context.Context, d AMQPDelivery, msg Message, handler MsgHandler) {
 	/**
 	 * Nack 代表訊息處理失敗
 	 * multiple：是否批次確認，true 代表確認該訊息以及之前的訊息，false 代表只確認該訊息
@@ -115,7 +115,7 @@ func (c *Consumer) handleDelivery(d AMQPDelivery, msg Message, handler MsgHandle
 	 * requeue：是否重新入隊，true 代表重新入隊，false 代表丟棄
 	 * 若為可重試的錯誤（例如網路異常），建議 requeue，若為不可重試的錯誤則建議丟棄
 	 */
-	if requeue, err := handler(msg); err != nil {
+	if requeue, err := handler(ctx, msg); err != nil {
 		log.Println("failed to handle message:", err.Error())
 
 		if err := d.Nack(false, requeue); err != nil {
