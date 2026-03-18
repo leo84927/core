@@ -21,7 +21,9 @@ type Message struct {
 	Body []byte
 }
 
-type MsgHandler func(context.Context, Message) (requeue bool, err error)
+type PublishHandler func(exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error
+
+type MsgHandler func(context.Context, Message, PublishHandler) (requeue bool, err error)
 
 func (cm *ConnectionManager) NewConsumer(queue, tag string, maxRetries uint, maxElpasedTime time.Duration) *Consumer {
 	// 不在這裡建立 channel，延遲到 consume 時才建
@@ -115,7 +117,7 @@ func (c *Consumer) handleDelivery(ctx context.Context, d AMQPDelivery, msg Messa
 	 * requeue：是否重新入隊，true 代表重新入隊，false 代表丟棄
 	 * 若為可重試的錯誤（例如網路異常），建議 requeue，若為不可重試的錯誤則建議丟棄
 	 */
-	if requeue, err := handler(ctx, msg); err != nil {
+	if requeue, err := handler(ctx, msg, c.cm.PublishWithRetry); err != nil {
 		log.Println("failed to handle message:", err.Error())
 
 		if err := d.Nack(false, requeue); err != nil {
