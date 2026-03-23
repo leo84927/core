@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -27,6 +29,7 @@ type Config struct {
 type ConnectionManager struct {
 	Config   *Config
 	mutex    sync.RWMutex
+	sfg      singleflight.Group
 	conn     AMQPConnection
 	topology atomic.Pointer[Topology]
 
@@ -120,19 +123,11 @@ func (cm *ConnectionManager) connect() (AMQPConnection, error) {
 	}
 	cm.mutex.RUnlock()
 
-	// 連線不存在
-	cm.mutex.Lock()
-	defer cm.mutex.Unlock()
-
-	// 雙重檢查，確保在獲取鎖期間沒有其他 goroutine 已經建立了連線
-	if cm.conn != nil && !cm.conn.IsClosed() {
-		return cm.conn, nil
-	}
-
-	// 建立新連線
-	err := cm.setConnWithRetry()
+	// 連線不存在時，singleflight 確保只有一個 goroutine 真正建立連線
+	_, err, _ := cm.sfg.Do("connect", func() (any, error) {
+		return nil, cm.setConnWithRetry()
+	})
 	if err != nil {
-		log.Println("Failed to establish connection, err:", err.Error())
 		return nil, err
 	}
 
@@ -167,7 +162,10 @@ func (cm *ConnectionManager) setConnWithRetry() error {
 		return err
 	}
 
+	cm.mutex.Lock()
 	cm.conn = conn
+	cm.mutex.Unlock()
+
 	return nil
 }
 
