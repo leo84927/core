@@ -6,6 +6,7 @@ import (
 	"log"
 	"log/slog"
 
+	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -40,37 +41,28 @@ func (lm *LogManager) SetLogger(ctx context.Context) error {
 		return nil
 	}
 
-	log.Println("SetLogger: setExporter start")
 	if err := lm.setExporter(ctx); err != nil {
 		return err
 	}
-	log.Println("SetLogger: setExporter done")
 
-	log.Println("SetLogger: setResource start")
 	if err := lm.setResource(ctx); err != nil {
 		return err
 	}
-	log.Println("SetLogger: setResource done")
 
-	log.Println("SetLogger: NewLoggerProvider start")
 	lm.provider = sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(
 			sdklog.NewBatchProcessor(lm.exporter), // 批次送出，效能較好
 		),
 		sdklog.WithResource(lm.resource),
 	)
-	log.Println("SetLogger: NewLoggerProvider done")
 
-	log.Println("SetLogger: NewHandler start")
 	handler := otelslog.NewHandler(
 		lm.Config.ServiceName,
-		otelslog.WithLoggerProvider(lm.provider), // 指定用哪個 Provider
+		otelslog.WithLoggerProvider(lm.provider),
 	)
-	log.Println("SetLogger: NewHandler done")
 
-	log.Println("SetLogger: slog.SetDefault start")
+	// slog.SetDefault 後，會改變 log.xxxxx 的行為，日誌會送到 handler 指定的目的地
 	slog.SetDefault(slog.New(handler))
-	log.Println("SetLogger: slog.SetDefault done")
 
 	return nil
 }
@@ -81,6 +73,7 @@ func (lm *LogManager) CloseLogger(ctx context.Context) {
 	}
 
 	if err := lm.provider.Shutdown(ctx); err != nil {
+		// ShutDown 如果失敗，代表 provider 可能已經失效，所以這裡可以用 log.Printf
 		log.Printf("CloseLogger failed, err: %v\n", err)
 		return
 	}
@@ -95,8 +88,7 @@ func (lm *LogManager) setExporter(ctx context.Context) error {
 		),
 	)
 	if err != nil {
-		log.Printf("setExporter failed, err: %v\n", err)
-		return err
+		return eris.Cause(err)
 	}
 
 	lm.exporter = exporter
@@ -111,8 +103,7 @@ func (lm *LogManager) setResource(ctx context.Context) error {
 		),
 	)
 	if err != nil {
-		log.Printf("setResource failed, err: %v\n", err)
-		return err
+		return eris.Cause(err)
 	}
 
 	lm.resource = res

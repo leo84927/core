@@ -3,6 +3,7 @@ module github.com/leo84927/logger
 go 1.26.1
 
 require (
+	github.com/rotisserie/eris v0.5.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.17.0
 	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.18.0
