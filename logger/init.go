@@ -40,27 +40,37 @@ func (lm *LogManager) SetLogger(ctx context.Context) error {
 		return nil
 	}
 
+	log.Println("SetLogger: setExporter start")
 	if err := lm.setExporter(ctx); err != nil {
 		return err
 	}
+	log.Println("SetLogger: setExporter done")
 
+	log.Println("SetLogger: setResource start")
 	if err := lm.setResource(ctx); err != nil {
 		return err
 	}
+	log.Println("SetLogger: setResource done")
 
+	log.Println("SetLogger: NewLoggerProvider start")
 	lm.provider = sdklog.NewLoggerProvider(
 		sdklog.WithProcessor(
 			sdklog.NewBatchProcessor(lm.exporter), // 批次送出，效能較好
 		),
 		sdklog.WithResource(lm.resource),
 	)
+	log.Println("SetLogger: NewLoggerProvider done")
 
+	log.Println("SetLogger: NewHandler start")
 	handler := otelslog.NewHandler(
 		lm.Config.ServiceName,
 		otelslog.WithLoggerProvider(lm.provider), // 指定用哪個 Provider
 	)
+	log.Println("SetLogger: NewHandler done")
 
+	log.Println("SetLogger: slog.SetDefault start")
 	slog.SetDefault(slog.New(handler))
+	log.Println("SetLogger: slog.SetDefault done")
 
 	return nil
 }
