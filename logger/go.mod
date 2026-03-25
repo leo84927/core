@@ -1,4 +1,4 @@
-module logger
+module github.com/leo84927/logger
 
 go 1.26.1
 
