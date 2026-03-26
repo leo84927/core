@@ -12,8 +12,6 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type Config struct {
@@ -83,9 +81,7 @@ func (lm *LogManager) setExporter(ctx context.Context) error {
 	endPoint := fmt.Sprintf("%s:%s", lm.Config.Host, lm.Config.Port)
 	exporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(endPoint),
-		otlploggrpc.WithDialOption(
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		),
+		otlploggrpc.WithInsecure(),
 	)
 	if err != nil {
 		return eris.Cause(err)
