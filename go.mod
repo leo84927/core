@@ -3,16 +3,18 @@ module github.com/leo84927/core
 go 1.26.1
 
 require (
+	github.com/cenkalti/backoff/v5 v5.0.3
+	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/rotisserie/eris v0.5.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.17.0
 	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.18.0
 	go.opentelemetry.io/otel/sdk v1.42.0
 	go.opentelemetry.io/otel/sdk/log v0.18.0
+	golang.org/x/sync v0.20.0
 )
 
 require (
-	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
