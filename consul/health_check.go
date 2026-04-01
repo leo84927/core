@@ -12,6 +12,11 @@ func (c *Client) SendHeartbeat(ctx context.Context, service string, interval tim
 	// 不要在 NewClient 時就指定 c.checkId，因為 service name 一定要先 NewClient 成功後才能取得
 	c.checkId = service
 
+	// 啟動時必定先發送一次，確認沒問題後再進迴圈
+	if err := c.agent.UpdateTTL(c.checkId, "ok", api.HealthPassing); err != nil {
+		return eris.Cause(err)
+	}
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
