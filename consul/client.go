@@ -11,7 +11,7 @@ type Client struct {
 	agent   *api.Agent
 }
 
-func NewClient() (*Client, error) {
+func NewClient(checkId string) (*Client, error) {
 	// DefaultConfig() 會自動用 os.Getenv 取得 CONSUL_HTTP_ADDR 環境變數，要使用 consul 的服務要記得先設定
 	client, err := api.NewClient(api.DefaultConfig())
 	if err != nil {
@@ -19,7 +19,8 @@ func NewClient() (*Client, error) {
 	}
 
 	return &Client{
-		kv:    client.KV(),
-		agent: client.Agent(),
+		checkId: checkId,
+		kv:      client.KV(),
+		agent:   client.Agent(),
 	}, nil
 }
