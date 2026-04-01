@@ -8,7 +8,10 @@ import (
 	"github.com/rotisserie/eris"
 )
 
-func (c *Client) SendHeartbeat(ctx context.Context, interval time.Duration) error {
+func (c *Client) SendHeartbeat(ctx context.Context, service string, interval time.Duration) error {
+	// 不要在 NewClient 時就指定 c.checkId，因為 service name 一定要先 NewClient 成功後才能取得
+	c.checkId = service
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
