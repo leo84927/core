@@ -21,7 +21,7 @@ type Message struct {
 	Body []byte
 }
 
-type PublishHandler func(exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error
+type PublishHandler func(ctx context.Context, exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error
 
 type MsgHandler func(context.Context, Message, PublishHandler) (requeue bool, err error)
 
@@ -52,7 +52,7 @@ func (c *Consumer) WaitForConsume(ctx context.Context, handler MsgHandler) error
 }
 
 func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) error {
-	conn, err := c.cm.connect()
+	conn, err := c.cm.connect(ctx)
 	if err != nil {
 		log.Println("failed to get connection, err:", err.Error())
 		return err
@@ -63,7 +63,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 		log.Println("failed to open a channel:", err.Error())
 		return err
 	}
-	defer func () {
+	defer func() {
 		/**
 		 * 1. 滿足 linter errcheck
 		 * 2. 閉包捕捉的是 reference，所以假如 ch 會因為 retry 而重新建立，也會關閉最新的值

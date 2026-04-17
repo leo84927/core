@@ -94,7 +94,7 @@ func TestConnect_ReusesExistingConn(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConn() // 直接塞入 mock，不需要真實連線
 
-	conn, err := cm.connect()
+	conn, err := cm.connect(t.Context())
 	if conn != cm.conn {
 		t.Fatal("expected same connection instance to be reused")
 	}
@@ -107,7 +107,7 @@ func TestConnect_ReusesExistingConn(t *testing.T) {
 func TestConnect_FailsWhenNoConn(t *testing.T) {
 	cm := newTestConnectionManager() // cm.conn 為 nil，會觸發 setConnWithRetry
 
-	conn, err := cm.connect()
+	conn, err := cm.connect(t.Context())
 	if conn != nil {
 		t.Fatalf("expected no connection, got: %v", conn)
 	}
@@ -125,7 +125,7 @@ func TestConnect_DoesNotReuseClosedConn(t *testing.T) {
 	cm.conn = closedConn
 
 	// 沒有 broker，setConnWithRetry 會失敗
-	conn, err := cm.connect()
+	conn, err := cm.connect(t.Context())
 	if conn != nil {
 		t.Fatalf("expected no connection, got: %v", conn)
 	}
@@ -343,7 +343,7 @@ func TestConnect_ConcurrentSafe(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			conn, err := cm.connect()
+			conn, err := cm.connect(t.Context())
 			if err != nil {
 				t.Errorf("goroutine %d: unexpected error: %v", idx, err)
 				return

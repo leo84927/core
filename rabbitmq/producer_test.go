@@ -52,7 +52,7 @@ func TestPublishWithRetry_Success(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
@@ -63,7 +63,7 @@ func TestPublishWithRetry_Success(t *testing.T) {
 func TestPublishWithRetry_ConnectFails(t *testing.T) {
 	cm := newTestConnectionManager() // conn 為 nil，沒有 broker
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err == nil {
 		t.Fatal("expected error when connect fails")
@@ -80,7 +80,7 @@ func TestPublishWithRetry_ChannelFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = mock
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err == nil {
 		t.Fatal("expected error when channel fails")
@@ -98,7 +98,7 @@ func TestPublishWithRetry_ConfirmFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err == nil {
 		t.Fatal("expected error when confirm fails")
@@ -116,7 +116,7 @@ func TestPublishWithRetry_PublishFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err == nil {
 		t.Fatal("expected error when publish fails")
@@ -134,7 +134,7 @@ func TestPublishWithRetry_NotConfirmed(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if err == nil {
 		t.Fatal("expected error when broker does not confirm")
@@ -158,7 +158,7 @@ func TestPublishWithRetry_Params(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if capturedExchange != "test.exchange" {
 		t.Errorf("expected exchange %q, got %q", "test.exchange", capturedExchange)
@@ -191,7 +191,7 @@ func TestPublishWithRetry_RetryOnFailure(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 5, 5*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 5, 5*time.Second)
 
 	if err != nil {
 		t.Fatalf("expected success after retry, got: %v", err)
@@ -208,7 +208,7 @@ func TestPublishWithRetry_ChannelClosedAfterSuccess(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if !ch.closed {
 		t.Fatal("expected channel to be closed after publish")
@@ -229,7 +229,7 @@ func TestPublishWithRetry_ChannelClosedAfterFailure(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")

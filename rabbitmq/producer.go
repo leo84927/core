@@ -9,9 +9,9 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-func (cm *ConnectionManager) PublishWithRetry(exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error {
+func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error {
 	operation := func() (struct{}, error) {
-		conn, err := cm.connect()
+		conn, err := cm.connect(ctx)
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)
 		}

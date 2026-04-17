@@ -25,9 +25,9 @@ type Topology struct {
 }
 
 // InitTopology：宣告 topology，包含重試邏輯，外部初始化時必須另外呼叫，WatchConnAndRetry 在最一開始不負責初始化 topology
-func (cm *ConnectionManager) InitTopology(topology Topology) error {
+func (cm *ConnectionManager) InitTopology(ctx context.Context, topology Topology) error {
 	operation := func() (struct{}, error) {
-		conn, err := cm.connect()
+		conn, err := cm.connect(ctx)
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)
 		}

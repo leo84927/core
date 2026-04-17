@@ -99,7 +99,7 @@ func TestInitTopology_Success(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(&mockChannel{})
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestInitTopology_Success(t *testing.T) {
 func TestInitTopology_ConnectFails(t *testing.T) {
 	cm := newTestConnectionManager() // cm.conn 為 nil，沒有 broker
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
 		t.Fatal("expected error when connect fails")
 	}
@@ -131,7 +131,7 @@ func TestInitTopology_ChannelFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = mock
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
 		t.Fatal("expected error when channel fails")
 	}
@@ -151,7 +151,7 @@ func TestInitTopology_ExchangeDeclareFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
 		t.Fatal("expected error when exchange declare fails")
 	}
@@ -171,7 +171,7 @@ func TestInitTopology_QueueDeclareFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
 		t.Fatal("expected error when queue declare fails")
 	}
@@ -188,7 +188,7 @@ func TestInitTopology_QueueBindFails(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
 		t.Fatal("expected error when queue bind fails")
 	}
@@ -271,7 +271,7 @@ func TestDeclareTopology_ChannelClosedAfterSuccess(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if !ch.closed {
 		t.Fatal("expected channel to be closed after InitTopology")
 	}
@@ -291,7 +291,7 @@ func TestDeclareTopology_ChannelClosedAfterFailure(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	err := cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(t.Context(), newTestTopology())
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")
 	}

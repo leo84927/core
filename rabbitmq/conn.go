@@ -57,7 +57,7 @@ func NewConnectionManager(config *Config) *ConnectionManager {
 
 func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
 	// 檢查連線是否存在並取得連線
-	conn, err := cm.connect()
+	conn, err := cm.connect(ctx)
 	if err != nil {
 		log.Println("connect failed, err:", err.Error())
 		return err
@@ -78,7 +78,7 @@ func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
 
 			// 異常關閉，重新取得連線，並更新 closeCh
 			log.Println("connection closed, err:", amqpErr.Error())
-			conn, err = cm.connect()
+			conn, err = cm.connect(ctx)
 			if err != nil {
 				log.Println("failed to connect, err:", err.Error())
 				return err
@@ -88,7 +88,7 @@ func (cm *ConnectionManager) WatchConnAndRetry(ctx context.Context) error {
 			// 重新宣告 topology
 			topology := cm.topology.Load()
 			if topology != nil {
-				err = cm.InitTopology(*topology)
+				err = cm.InitTopology(ctx, *topology)
 				if err != nil {
 					log.Println("failed to declare topology, err:", err.Error())
 					return err
@@ -113,7 +113,7 @@ func (cm *ConnectionManager) Close() {
 }
 
 // connect：明確建立連線（含 lazy 語意）
-func (cm *ConnectionManager) connect() (AMQPConnection, error) {
+func (cm *ConnectionManager) connect(ctx context.Context) (AMQPConnection, error) {
 	// 先檢查連線是否存在
 	cm.mutex.RLock()
 	if cm.conn != nil && !cm.conn.IsClosed() {
@@ -123,9 +123,13 @@ func (cm *ConnectionManager) connect() (AMQPConnection, error) {
 	}
 	cm.mutex.RUnlock()
 
-	// 連線不存在時，singleflight 確保只有一個 goroutine 真正建立連線
+	/**
+	 * 連線不存在時，singleflight 確保只有一個 goroutine 真正建立連線
+	 * 假設併發 100個 goroutine 時，使用 mutex 鎖的話，就會經歷 100次的加鎖解鎖
+	 * 但 singleflight 會讓後 99個 goroutine 拿到相同的結果，而不用經歷這 100次的加解鎖
+	 */
 	_, err, _ := cm.sfg.Do("connect", func() (any, error) {
-		return nil, cm.setConnWithRetry()
+		return nil, cm.setConnWithRetry(ctx)
 	})
 	if err != nil {
 		return nil, err
@@ -150,9 +154,9 @@ func (cm *ConnectionManager) getConn() (AMQPConnection, error) {
  * 這個寫法代表只能設定一個連線
  * 如果之後有多個 vhost 再來重構
  */
-func (cm *ConnectionManager) setConnWithRetry() error {
+func (cm *ConnectionManager) setConnWithRetry(ctx context.Context) error {
 	conn, err := backoff.Retry(
-		context.Background(),
+		ctx,
 		cm.dialFunc,
 		backoff.WithMaxElapsedTime(cm.Config.MaxElpasedTime),
 		backoff.WithMaxTries(cm.Config.MaxRetries),
