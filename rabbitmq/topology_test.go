@@ -271,9 +271,12 @@ func TestDeclareTopology_ChannelClosedAfterSuccess(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(newTestTopology())
 	if !ch.closed {
 		t.Fatal("expected channel to be closed after InitTopology")
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
@@ -288,9 +291,12 @@ func TestDeclareTopology_ChannelClosedAfterFailure(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	cm.InitTopology(newTestTopology())
+	err := cm.InitTopology(newTestTopology())
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")
+	}
+	if err != nil && err.Error() != "exchange declare failed" {
+		t.Fatalf("expected exchange declare failed, got: %v", err)
 	}
 }
 

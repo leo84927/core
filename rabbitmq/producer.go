@@ -19,7 +19,9 @@ func (cm *ConnectionManager) PublishWithRetry(exchange, key string, body []byte,
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)
 		}
-		defer ch.Close()
+		defer func() {
+			_ = ch.Close()
+		}()
 
 		if err := ch.Confirm(false); err != nil {
 			return struct{}{}, permanentIfNeeded(err)
@@ -40,7 +42,7 @@ func (cm *ConnectionManager) PublishWithRetry(exchange, key string, body []byte,
 		}
 
 		if confirmed := confirm.Wait(); !confirmed {
-			return struct{}{}, errors.New("Publish message failed")
+			return struct{}{}, errors.New("publish message failed")
 		}
 
 		return struct{}{}, nil

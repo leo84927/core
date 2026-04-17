@@ -63,7 +63,13 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 		log.Println("failed to open a channel:", err.Error())
 		return err
 	}
-	defer ch.Close()
+	defer func () {
+		/**
+		 * 1. 滿足 linter errcheck
+		 * 2. 閉包捕捉的是 reference，所以假如 ch 會因為 retry 而重新建立，也會關閉最新的值
+		 */
+		_ = ch.Close()
+	}()
 
 	// 限制未確認消息數量，避免消費者一次拿太多消息導致記憶體不足
 	err = ch.Qos(

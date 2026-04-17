@@ -36,7 +36,9 @@ func (cm *ConnectionManager) InitTopology(topology Topology) error {
 		if err != nil {
 			return struct{}{}, permanentIfNeeded(err)
 		}
-		defer ch.Close()
+		defer func() {
+			_ = ch.Close()
+		}()
 
 		if err := cm.declareTopology(ch, topology); err != nil {
 			return struct{}{}, permanentIfNeeded(err)

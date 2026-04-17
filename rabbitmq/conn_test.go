@@ -371,7 +371,10 @@ func TestGetConnAndClose_ConcurrentSafe(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			cm.getConn()
+			_, err := cm.getConn()
+			if err != nil && err.Error() != "no active connection" {
+				t.Error("expected no active connection, got: ", err)
+			}
 		}()
 		go func() {
 			defer wg.Done()

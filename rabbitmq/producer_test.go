@@ -158,7 +158,7 @@ func TestPublishWithRetry_Params(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if capturedExchange != "test.exchange" {
 		t.Errorf("expected exchange %q, got %q", "test.exchange", capturedExchange)
@@ -168,6 +168,9 @@ func TestPublishWithRetry_Params(t *testing.T) {
 	}
 	if string(capturedBody) != "hello" {
 		t.Errorf("expected body %q, got %q", "hello", capturedBody)
+	}
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
 	}
 }
 
@@ -205,10 +208,13 @@ func TestPublishWithRetry_ChannelClosedAfterSuccess(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if !ch.closed {
 		t.Fatal("expected channel to be closed after publish")
+	}
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }
 
@@ -223,9 +229,12 @@ func TestPublishWithRetry_ChannelClosedAfterFailure(t *testing.T) {
 	cm := newTestConnectionManager()
 	cm.conn = newMockConnWithChannel(ch)
 
-	cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+	err := cm.PublishWithRetry("test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")
+	}
+	if err != nil && err.Error() != "confirm mode failed" {
+		t.Fatalf("expected confirm mode failed, got: %v", err)
 	}
 }

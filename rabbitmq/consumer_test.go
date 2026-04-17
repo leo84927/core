@@ -222,12 +222,15 @@ func TestWaitForConsume_ChannelClosedAfterDone(t *testing.T) {
 	cm.conn = newMockConnWithChannel(ch)
 
 	consumer := newTestConsumer(cm)
-	consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
 		return false, nil
 	})
 
 	if !ch.closed {
 		t.Fatal("expected channel to be closed after WaitForConsume")
+	}
+	if err != nil && err.Error() != "channel closed" {
+		t.Fatalf("expected channel closed, got: %v", err)
 	}
 }
 
