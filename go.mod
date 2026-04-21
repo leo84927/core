@@ -3,6 +3,7 @@ module github.com/leo84927/core
 go 1.26.1
 
 require (
+	buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260420071308-c2dd85fa7562.1
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/hashicorp/consul/api v1.33.7
 	github.com/rabbitmq/amqp091-go v1.10.0
