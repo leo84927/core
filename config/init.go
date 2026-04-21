@@ -9,19 +9,7 @@ import (
 	"github.com/leo84927/core/consul"
 )
 
-type ServiceConfig struct {
-	ServicePrefix string
-	EnvKeys       []string
-}
-
-func NewServiceConfig(prefix string, envKeys []string) *ServiceConfig {
-	return &ServiceConfig{
-		ServicePrefix: prefix,
-		EnvKeys:       envKeys,
-	}
-}
-
-func (sc *ServiceConfig) InitFromConsul() {
+func InitFromConsul(prefix string) {
 	var err error
 
 	// 建立 consul client，失敗時要直接 panic
@@ -36,7 +24,7 @@ func (sc *ServiceConfig) InitFromConsul() {
 	}
 
 	// 取得服務相關的環境變數，遍歷後指定給 EnvMap
-	if serviceMap, err := Client.List(sc.ServicePrefix); err != nil {
+	if serviceMap, err := Client.List(prefix); err != nil {
 		log.Fatalf("get env from consul failed, err: %v\n", err)
 	} else {
 		maps.Copy(EnvMap, serviceMap)
