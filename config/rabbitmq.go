@@ -37,7 +37,7 @@ func LoadBasicRabbitMQ() {
 		Port:           EnvMap[cp.GlobalEnvKey_GLOBAL_RABBITMQ_PORT.String()],
 		Vhost:          EnvMap[cp.GlobalEnvKey_GLOBAL_RABBITMQ_VHOST.String()],
 		MaxRetries:     uint(connMaxRetries),
-		MaxElpasedTime: connMaxElapsed,
+		MaxElapsedTime: connMaxElapsed,
 	}
 }
 

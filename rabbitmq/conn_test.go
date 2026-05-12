@@ -74,7 +74,7 @@ func (m *mockConn) simulateNormalClose() {
 
 func newTestConnectionManager() *ConnectionManager {
 	return NewConnectionManager(&Config{
-		MaxElpasedTime: 1 * time.Second,
+		MaxElapsedTime: 1 * time.Second,
 		MaxRetries:     1,
 	})
 }
