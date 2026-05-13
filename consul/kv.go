@@ -1,6 +1,10 @@
 package consul
 
-import "github.com/rotisserie/eris"
+import (
+	"strings"
+
+	"github.com/rotisserie/eris"
+)
 
 func (c *Client) List(prefix string) (map[string]string, error) {
 	pairs, _, err := c.kv.List(prefix, nil)
@@ -10,7 +14,8 @@ func (c *Client) List(prefix string) (map[string]string, error) {
 
 	result := make(map[string]string, len(pairs))
 	for _, kv := range pairs {
-		result[kv.Key] = string(kv.Value)
+		key := strings.ReplaceAll(kv.Key, "/", "_")
+		result[key] = string(kv.Value)
 	}
 
 	return result, nil

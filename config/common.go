@@ -6,5 +6,4 @@ var (
 	Client             *consul.Client
 	EnvMap             map[string]string
 	ServiceName        string
-	ExchangeRateApiKey string
 )
