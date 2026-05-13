@@ -3,9 +3,11 @@ module github.com/leo84927/core
 go 1.26.1
 
 require (
-	buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260420071308-c2dd85fa7562.1
+	buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260513062915-9eb354d96456.1
 	github.com/cenkalti/backoff/v5 v5.0.3
+	github.com/go-sql-driver/mysql v1.10.0
 	github.com/hashicorp/consul/api v1.33.7
+	github.com/jmoiron/sqlx v1.4.0
 	github.com/rabbitmq/amqp091-go v1.10.0
 	github.com/rotisserie/eris v0.5.4
 	go.opentelemetry.io/contrib/bridges/otelslog v0.17.0
@@ -14,8 +16,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.42.0
 	go.opentelemetry.io/otel/sdk/log v0.18.0
 	golang.org/x/sync v0.20.0
-	github.com/jmoiron/sqlx v1.4.0
-	github.com/go-sql-driver/mysql v1.10.0
 )
 
 require (

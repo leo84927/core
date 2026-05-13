@@ -1,4 +1,4 @@
-package database
+package mariadb
 
 import (
 	"fmt"
@@ -16,9 +16,9 @@ type DataSourceName struct {
 	DatabaseName string
 	Charset      string
 	Collation    string
-	Timeout      uint // 一次完整 SQL 中，對 TCP 認證的限時
-	ReadTimeout  uint // 一次完整 SQL 中，執行 conn.Read 後，到資料進入 OS recv buffer 為止的限時
-	WriteTimeout uint // 一次完整 SQL 中，發送 SQL 到 OS send buffer 的限時
+	Timeout      string // 一次完整 SQL 中，對 TCP 認證的限時
+	ReadTimeout  string // 一次完整 SQL 中，執行 conn.Read 後，到資料進入 OS recv buffer 為止的限時
+	WriteTimeout string // 一次完整 SQL 中，發送 SQL 到 OS send buffer 的限時
 
 	MaxOpenConns    int           // 最多同時開啟幾條連線（包含 idle + in-use），超過此數的請求會排隊等待。設太小會成為瓶頸，設太大會壓垮資料庫。
 	MaxIdleConns    int           // 連線池中最多保留幾條閒置連線。閒置連線可以被下一次請求直接重用，避免重新建立連線的開銷。建議設為 MaxOpenConns 的一半以下。
@@ -56,7 +56,7 @@ func (d DataSourceName) buildDB() (*sqlx.DB, error) {
 
 func (d DataSourceName) buildDSN() string {
 	dsn := fmt.Sprintf(
-		"%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&loc=UTC&collation=%s&timeout=%ds&readTimeout=%ds&writeTimeout=%ds",
+		"%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&loc=UTC&collation=%s&timeout=%s&readTimeout=%s&writeTimeout=%s",
 		d.User,
 		d.Password,
 		d.Host,
