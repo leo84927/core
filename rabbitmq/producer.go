@@ -49,7 +49,7 @@ func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key
 	}
 
 	_, err := backoff.Retry(
-		context.Background(),
+		ctx,
 		operation,
 		backoff.WithMaxTries(maxRetries),
 		backoff.WithMaxElapsedTime(maxElapsedTime),

@@ -48,7 +48,7 @@ func (cm *ConnectionManager) InitTopology(ctx context.Context, topology Topology
 	}
 
 	_, err := backoff.Retry(
-		context.Background(),
+		ctx,
 		operation,
 		backoff.WithMaxElapsedTime(topology.MaxElpasedTime),
 		backoff.WithMaxTries(topology.MaxRetries),
