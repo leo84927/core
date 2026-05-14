@@ -9,7 +9,7 @@ import (
 	"github.com/leo84927/core/mariadb"
 )
 
-var mariadbCfg *mariadb.Config
+var mariadbCfg mariadb.Config
 
 func LoadMariaDbConfig() {
 	connMaxRetries, err := strconv.Atoi(EnvMap[cp.GlobalEnvKey_GLOBAL_MARIADB_CONN_MAX_RETRIES.String()])
@@ -33,7 +33,7 @@ func LoadMariaDbConfig() {
 	readTimeout := EnvMap[cp.GlobalEnvKey_GLOBAL_MARIADB_READ_TIMEOUT.String()]
 	writeTimeout := EnvMap[cp.GlobalEnvKey_GLOBAL_MARIADB_WRITE_TIMEOUT.String()]
 
-	mariadbCfg = &mariadb.Config{
+	mariadbCfg = mariadb.Config{
 		WriteDB: mariadb.DataSourceName{
 			User:         user,
 			Password:     password,
@@ -61,4 +61,8 @@ func LoadMariaDbConfig() {
 		MaxRetries:     uint(connMaxRetries),
 		MaxElapsedTime: connMaxElapsed,
 	}
+}
+
+func GetMariaDbConfig() mariadb.Config {
+	return mariadbCfg
 }

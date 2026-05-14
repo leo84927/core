@@ -11,12 +11,12 @@ import (
 )
 
 type ConnectionManager struct {
-	config *Config
+	config Config
 	write  dbHolder
 	read   dbHolder
 }
 
-func NewConnectionManager(config *Config) *ConnectionManager {
+func NewConnectionManager(config Config) *ConnectionManager {
 	return &ConnectionManager{
 		config: config,
 	}
