@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"os/signal"
 	"runtime/debug"
-	"syscall"
 	"time"
 
 	"github.com/leo84927/core/config"
@@ -18,8 +16,6 @@ import (
 )
 
 type App struct {
-	SignalCtx  context.Context
-	SignalStop context.CancelFunc
 	LogManager *logger.LogManager
 	RabbitmqCM *rabbitmq.ConnectionManager
 
@@ -29,13 +25,10 @@ type App struct {
 	Workers []func(ctx context.Context) error
 }
 
-func New() (*App, error) {
+func New(ctx context.Context) (*App, error) {
 	var app = &App{
 		connReady: make(chan struct{}),
 	}
-
-	// 宣告 root ctx
-	app.SignalCtx, app.SignalStop = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 
 	// 輸出到 grafana
 	app.LogManager = logger.NewLogManager(&logger.Config{
@@ -43,7 +36,7 @@ func New() (*App, error) {
 		Host:        config.AlloyHost,
 		Port:        config.AlloyPort,
 	})
-	err := app.LogManager.SetLogger(app.SignalCtx)
+	err := app.LogManager.SetLogger(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "set logger failed, err: %v\n", err)
 		return nil, err
@@ -55,21 +48,19 @@ func New() (*App, error) {
 	return app, nil
 }
 
-func (app *App) Close() {
+func (app *App) Close(ctx context.Context) {
 	app.RabbitmqCM.Close()
 
-	app.LogManager.CloseLogger(app.SignalCtx)
+	app.LogManager.CloseLogger(ctx)
 
 	if r := recover(); r != nil {
 		err := fmt.Errorf("recovered: %v\n%s", r, debug.Stack())
 		fmt.Fprintln(os.Stderr, err)
 	}
-
-	app.SignalStop()
 }
 
-func (app *App) Run() {
-	group, groupCtx := errgroup.WithContext(app.SignalCtx)
+func (app *App) Run(ctx context.Context) {
+	group, groupCtx := errgroup.WithContext(ctx)
 
 	graceful(group, func() error {
 		// 這裏預設 consumer 的 goroutine 透過 Workers 傳遞，所以當 Workers 不為 0 代表需要建立 consumer
