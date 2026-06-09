@@ -5,6 +5,7 @@ import (
 	"log"
 	"maps"
 	"os"
+	"strings"
 	"time"
 
 	cp "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/consul"
@@ -111,7 +112,9 @@ func List(ctx context.Context, pattern string) (map[string]string, error) {
 		result := make(map[string]string, len(keys))
 		for i, val := range vals {
 			if val != nil {
-				result[keys[i]] = val.(string)
+				// 把 key 中的 ":" 替換成 "_"
+				key := strings.ReplaceAll(keys[i], ":", "_")
+				result[key] = val.(string)
 			}
 		}
 
