@@ -106,3 +106,20 @@ func (lm *LogManager) setResource(ctx context.Context) error {
 	lm.resource = res
 	return nil
 }
+
+func (lm *LogManager) Ping(ctx context.Context) error {
+    if lm.provider == nil {
+        return eris.New("provider not initialized")
+    }
+
+    slog.InfoContext(ctx, "ping",
+        slog.String("service", lm.Config.ServiceName),
+    )
+
+    // 強制把 buffer 裡的 log 立刻送出（BatchProcessor 預設是延遲送）
+    if err := lm.provider.ForceFlush(ctx); err != nil {
+        return eris.Wrap(err, "ping failed")
+    }
+
+    return nil
+}
