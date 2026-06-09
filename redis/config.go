@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"time"
 
@@ -35,6 +36,7 @@ func (c *Config) buildClient(ctx context.Context) (*goredis.Client, error) {
 		WriteTimeout: c.WriteTimeout,
 		PoolSize:     c.PoolSize,
 		MinIdleConns: c.MinIdleConns,
+		TLSConfig:    &tls.Config{},
 	})
 
 	if err := client.Ping(ctx).Err(); err != nil {
