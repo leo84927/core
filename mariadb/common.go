@@ -28,6 +28,10 @@ func permanentIfNeeded(err error) error {
 
 	// TLS 憑證錯誤
 	if tlsErr := (*tls.CertificateVerificationError)(nil); errors.As(err, &tlsErr) {
+		slog.Error(
+			"redis tls certificate verification error",
+			"error", eris.ToJSON(err, true),
+		)
 		return backoff.Permanent(tlsErr)
 	}
 
