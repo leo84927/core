@@ -1,6 +1,6 @@
 package config
 
 var (
-	AlloyHost string
-	AlloyPort string
+	GrafanaEndpoint   string
+	GrafanaAuthHeader string
 )

@@ -33,8 +33,8 @@ func New(ctx context.Context) (*App, error) {
 	// 輸出到 grafana
 	app.LogManager = logger.NewLogManager(&logger.Config{
 		ServiceName: config.ServiceName,
-		Host:        config.AlloyHost,
-		Port:        config.AlloyPort,
+		Endpoint:    config.GrafanaEndpoint,
+		AuthHeader:  config.GrafanaAuthHeader,
 	})
 	err := app.LogManager.SetLogger(ctx)
 	if err != nil {

@@ -2,7 +2,7 @@ package logger
 
 import (
 	"context"
-	"fmt"
+	"crypto/tls"
 	"log"
 	"log/slog"
 
@@ -12,12 +12,13 @@ import (
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"google.golang.org/grpc/credentials"
 )
 
 type Config struct {
 	ServiceName string
-	Host        string
-	Port        string
+	Endpoint    string
+	AuthHeader  string
 }
 
 type LogManager struct {
@@ -78,10 +79,10 @@ func (lm *LogManager) CloseLogger(ctx context.Context) {
 }
 
 func (lm *LogManager) setExporter(ctx context.Context) error {
-	endPoint := fmt.Sprintf("%s:%s", lm.Config.Host, lm.Config.Port)
 	exporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint(endPoint),
-		otlploggrpc.WithInsecure(),
+		otlploggrpc.WithEndpoint(lm.Config.Endpoint),
+		otlploggrpc.WithTLSCredentials(credentials.NewTLS(&tls.Config{})),
+		otlploggrpc.WithHeaders(map[string]string{"Authorization": lm.Config.AuthHeader}),
 	)
 	if err != nil {
 		return eris.Cause(err)
