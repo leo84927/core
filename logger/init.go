@@ -83,6 +83,7 @@ func (lm *LogManager) setExporter(ctx context.Context) error {
 	fmt.Fprintln(os.Stdout, "AuthHeader: "+lm.Config.AuthHeader)
 	exporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(lm.Config.Endpoint),
+		otlploggrpc.WithEndpointURL("/otlp/v1/logs"),
 		otlploggrpc.WithTLSCredentials(credentials.NewTLS(&tls.Config{})),
 		otlploggrpc.WithHeaders(map[string]string{"Authorization": lm.Config.AuthHeader}),
 	)
