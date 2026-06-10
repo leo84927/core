@@ -244,7 +244,7 @@ func TestHandleDelivery_HandlerSuccess_CallsAck(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, nil, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
 		return false, nil
 	})
 
@@ -262,7 +262,7 @@ func TestHandleDelivery_HandlerFails_Requeue(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, nil, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
 		return true, errors.New("handler failed")
 	})
 
@@ -283,7 +283,7 @@ func TestHandleDelivery_HandlerFails_NoRequeue(t *testing.T) {
 	cm := newTestConnectionManager()
 	consumer := newTestConsumer(cm)
 
-	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("hello")}, nil, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
 		return false, errors.New("handler failed")
 	})
 
@@ -302,7 +302,7 @@ func TestHandleDelivery_PassesCorrectBody(t *testing.T) {
 	consumer := newTestConsumer(cm)
 
 	var receivedBody []byte
-	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("test-body")}, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+	consumer.handleDelivery(context.Background(), d, Message{Body: []byte("test-body")}, nil, func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
 		receivedBody = msg.Body
 		return false, nil
 	})

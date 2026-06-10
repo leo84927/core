@@ -16,7 +16,7 @@ import (
 )
 
 type App struct {
-	LogManager *logger.LogManager
+	LogManager *logger.Manager
 	RabbitmqCM *rabbitmq.ConnectionManager
 
 	connReady chan struct{}
@@ -30,15 +30,21 @@ func New(ctx context.Context) (*App, error) {
 		connReady: make(chan struct{}),
 	}
 
-	// 輸出到 grafana
-	app.LogManager = logger.NewLogManager(&logger.Config{
+	app.LogManager = logger.NewManager(&logger.Config{
 		ServiceName: config.ServiceName,
 		Endpoint:    config.GrafanaEndpoint,
 		AuthHeader:  config.GrafanaAuthHeader,
 	})
+	// 輸出 log 到 grafana
 	err := app.LogManager.SetLogger(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "set logger failed, err: %v\n", err)
+		return nil, err
+	}
+	// 輸出 trace 到 grafana
+	err = app.LogManager.SetTracer(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "set tracer failed, err: %v\n", err)
 		return nil, err
 	}
 
@@ -51,7 +57,7 @@ func New(ctx context.Context) (*App, error) {
 func (app *App) Close(ctx context.Context) {
 	app.RabbitmqCM.Close()
 
-	app.LogManager.CloseLogger(ctx)
+	app.LogManager.Close(ctx)
 
 	if r := recover(); r != nil {
 		err := fmt.Errorf("recovered: %v\n%s", r, debug.Stack())

@@ -7,6 +7,11 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	amqp "github.com/rabbitmq/amqp091-go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Consumer struct {
@@ -106,7 +111,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 				return errors.New("channel closed")
 			}
 
-			c.handleDelivery(ctx, &amqpDelivery{&d}, Message{Body: d.Body}, handler)
+			c.handleDelivery(ctx, &amqpDelivery{&d}, Message{Body: d.Body}, d.Headers, handler)
 
 		case <-ctx.Done():
 			log.Println("context cancelled, shutting down consumer")
@@ -115,7 +120,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	}
 }
 
-func (c *Consumer) handleDelivery(ctx context.Context, d AMQPDelivery, msg Message, handler MsgHandler) {
+func (c *Consumer) handleDelivery(ctx context.Context, d AMQPDelivery, msg Message, headers amqp.Table, handler MsgHandler) {
 	/**
 	 * Nack 代表訊息處理失敗
 	 * multiple：是否批次確認，true 代表確認該訊息以及之前的訊息，false 代表只確認該訊息
@@ -123,7 +128,20 @@ func (c *Consumer) handleDelivery(ctx context.Context, d AMQPDelivery, msg Messa
 	 * requeue：是否重新入隊，true 代表重新入隊，false 代表丟棄
 	 * 若為可重試的錯誤（例如網路異常），建議 requeue，若為不可重試的錯誤則建議丟棄
 	 */
+	ctx = otel.GetTextMapPropagator().Extract(ctx, amqpHeaderCarrier(headers))
+	ctx, span := otel.Tracer("rabbitmq").Start(ctx, "consume",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "rabbitmq"),
+			attribute.String("messaging.destination.name", c.queue),
+			attribute.String("messaging.operation.type", "receive"),
+		),
+	)
+	defer span.End()
+
 	if requeue, err := handler(ctx, msg, c.cm.PublishWithRetry); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, err.Error())
 		log.Println("failed to handle message:", err.Error())
 
 		if err := d.Nack(false, requeue); err != nil {
