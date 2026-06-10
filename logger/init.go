@@ -2,18 +2,16 @@ package logger
 
 import (
 	"context"
-	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
-	"google.golang.org/grpc/credentials"
 )
 
 type Config struct {
@@ -24,7 +22,7 @@ type Config struct {
 
 type LogManager struct {
 	Config   *Config
-	exporter *otlploggrpc.Exporter
+	exporter *otlploghttp.Exporter
 	resource *resource.Resource
 	provider *sdklog.LoggerProvider
 }
@@ -81,11 +79,10 @@ func (lm *LogManager) CloseLogger(ctx context.Context) {
 func (lm *LogManager) setExporter(ctx context.Context) error {
 	fmt.Fprintln(os.Stdout, "Endpoint: "+lm.Config.Endpoint)
 	fmt.Fprintln(os.Stdout, "AuthHeader: "+lm.Config.AuthHeader)
-	exporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint(lm.Config.Endpoint),
-		otlploggrpc.WithEndpointURL("/otlp/v1/logs"),
-		otlploggrpc.WithTLSCredentials(credentials.NewTLS(&tls.Config{})),
-		otlploggrpc.WithHeaders(map[string]string{"Authorization": lm.Config.AuthHeader}),
+	exporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(lm.Config.Endpoint),
+		otlploghttp.WithURLPath("/otlp/v1/logs"),
+		otlploghttp.WithHeaders(map[string]string{"Authorization": lm.Config.AuthHeader}),
 	)
 	if err != nil {
 		return eris.Cause(err)
