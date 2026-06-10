@@ -3,8 +3,9 @@ package logger
 import (
 	"context"
 	"crypto/tls"
-	"log"
+	"fmt"
 	"log/slog"
+	"os"
 
 	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
@@ -72,13 +73,14 @@ func (lm *LogManager) CloseLogger(ctx context.Context) {
 	}
 
 	if err := lm.provider.Shutdown(ctx); err != nil {
-		// ShutDown 如果失敗，代表 provider 可能已經失效，所以這裡可以用 log.Printf
-		log.Printf("CloseLogger failed, err: %v\n", err)
+		fmt.Fprintln(os.Stderr, eris.Wrap(err, "shutdown logger provider failed"))
 		return
 	}
 }
 
 func (lm *LogManager) setExporter(ctx context.Context) error {
+	fmt.Fprintln(os.Stdout, "Endpoint: "+lm.Config.Endpoint)
+	fmt.Fprintln(os.Stdout, "AuthHeader: "+lm.Config.AuthHeader)
 	exporter, err := otlploggrpc.New(ctx,
 		otlploggrpc.WithEndpoint(lm.Config.Endpoint),
 		otlploggrpc.WithTLSCredentials(credentials.NewTLS(&tls.Config{})),
@@ -108,18 +110,18 @@ func (lm *LogManager) setResource(ctx context.Context) error {
 }
 
 func (lm *LogManager) Ping(ctx context.Context) error {
-    if lm.provider == nil {
-        return eris.New("provider not initialized")
-    }
+	if lm.provider == nil {
+		return eris.New("provider not initialized")
+	}
 
-    slog.InfoContext(ctx, "ping",
-        slog.String("service", lm.Config.ServiceName),
-    )
+	slog.InfoContext(ctx, "ping",
+		slog.String("service", lm.Config.ServiceName),
+	)
 
-    // 強制把 buffer 裡的 log 立刻送出（BatchProcessor 預設是延遲送）
-    if err := lm.provider.ForceFlush(ctx); err != nil {
-        return eris.Wrap(err, "ping failed")
-    }
+	// 強制把 buffer 裡的 log 立刻送出（BatchProcessor 預設是延遲送）
+	if err := lm.provider.ForceFlush(ctx); err != nil {
+		return eris.Wrap(err, "ping failed")
+	}
 
-    return nil
+	return nil
 }
