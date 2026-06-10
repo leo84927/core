@@ -77,11 +77,8 @@ func (lm *LogManager) CloseLogger(ctx context.Context) {
 }
 
 func (lm *LogManager) setExporter(ctx context.Context) error {
-	fmt.Fprintln(os.Stdout, "Endpoint: "+lm.Config.Endpoint)
-	fmt.Fprintln(os.Stdout, "AuthHeader: "+lm.Config.AuthHeader)
 	exporter, err := otlploghttp.New(ctx,
-		otlploghttp.WithEndpoint(lm.Config.Endpoint),
-		otlploghttp.WithURLPath("/otlp/v1/logs"),
+		otlploghttp.WithEndpointURL(lm.Config.Endpoint),
 		otlploghttp.WithHeaders(map[string]string{"Authorization": lm.Config.AuthHeader}),
 	)
 	if err != nil {
