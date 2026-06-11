@@ -57,7 +57,7 @@ func New(ctx context.Context) (*App, error) {
 func (app *App) Close(ctx context.Context) {
 	app.RabbitmqCM.Close()
 
-	app.LogManager.Close(ctx)
+	app.LogManager.Close()
 
 	if r := recover(); r != nil {
 		err := fmt.Errorf("recovered: %v\n%s", r, debug.Stack())

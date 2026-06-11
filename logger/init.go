@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
@@ -34,7 +35,11 @@ func NewManager(config *Config) *Manager {
 	}
 }
 
-func (m *Manager) Close(ctx context.Context) {
+func (m *Manager) Close() {
+	// 由於 close 時還會做 flush，如果使用傳進來的 ctx，會因為 ctx 早已先被取消，導致觸發 err；改成使用新的 ctx，並設定 timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
 	if m.logProvider != nil {
 		if err := m.logProvider.Shutdown(ctx); err != nil {
 			fmt.Fprintln(os.Stderr, eris.Wrap(err, "shutdown log provider failed"))
