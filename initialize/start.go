@@ -16,48 +16,49 @@ import (
 )
 
 type App struct {
-	LogManager *logger.Manager
-	RabbitmqCM *rabbitmq.ConnectionManager
-
-	connReady chan struct{}
-	Consumer  *rabbitmq.Consumer
-
-	Workers []func(ctx context.Context) error
+	logManager *logger.Manager
+	MQWorker   MQWorker
+	HttpWorker HttpWorker
 }
 
-func New(ctx context.Context) (*App, error) {
-	var app = &App{
-		connReady: make(chan struct{}),
-	}
-
-	app.LogManager = logger.NewManager(&logger.Config{
+func New(ctx context.Context, app *App) (*App, error) {
+	app.logManager = logger.NewManager(&logger.Config{
 		ServiceName: config.ServiceName,
 		Endpoint:    config.GrafanaEndpoint,
 		AuthHeader:  config.GrafanaAuthHeader,
 	})
 	// 輸出 log 到 grafana
-	err := app.LogManager.SetLogger(ctx)
+	err := app.logManager.SetLogger(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "set logger failed, err: %v\n", err)
 		return nil, err
 	}
 	// 輸出 trace 到 grafana
-	err = app.LogManager.SetTracer(ctx)
+	err = app.logManager.SetTracer(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "set tracer failed, err: %v\n", err)
 		return nil, err
 	}
 
 	// 初始化 rabbitmq
-	app.RabbitmqCM = rabbitmq.NewConnectionManager(config.GetRabbitMQConfig().Config)
+	if cfg := config.GetRabbitMQConfig(); cfg.Config != nil {
+		app.MQWorker.connReady = make(chan struct{})
+		app.MQWorker.RabbitmqCM = rabbitmq.NewConnectionManager(cfg.Config)
+
+		if app.MQWorker.MsgHandler != nil && cfg.ServiceQueue.Name != "" {
+			app.MQWorker.Consumer = app.MQWorker.RabbitmqCM.NewConsumer(cfg.ServiceQueue.Name, "", 5, 20*time.Second)
+		}
+	}
 
 	return app, nil
 }
 
 func (app *App) Close(ctx context.Context) {
-	app.RabbitmqCM.Close()
+	if app.MQWorker.RabbitmqCM != nil {
+		app.MQWorker.RabbitmqCM.Close()
+	}
 
-	app.LogManager.Close()
+	app.logManager.Close()
 
 	if r := recover(); r != nil {
 		err := fmt.Errorf("recovered: %v\n%s", r, debug.Stack())
@@ -68,44 +69,20 @@ func (app *App) Close(ctx context.Context) {
 func (app *App) Run(ctx context.Context) {
 	group, groupCtx := errgroup.WithContext(ctx)
 
-	graceful(group, func() error {
-		// 這裏預設 consumer 的 goroutine 透過 Workers 傳遞，所以當 Workers 不為 0 代表需要建立 consumer
-		if len(app.Workers) != 0 {
-			app.Consumer = app.RabbitmqCM.NewConsumer(config.GetRabbitMQConfig().ServiceQueue.Name, "", 5, 20*time.Second)
+	if app.MQWorker.RabbitmqCM != nil {
+		graceful(group, func() error { return app.MQWorker.ConnectionExecution(groupCtx) })
+	}
+	if app.MQWorker.MsgHandler != nil {
+		graceful(group, func() error { return app.MQWorker.ConsumerExecution(groupCtx) })
+	}
 
-			// 建立連線＆拓樸
-			if err := app.RabbitmqCM.InitTopology(groupCtx, config.GetRabbitMQConfig().Topology); err != nil {
-				return err
-			}
-		}
+	if app.HttpWorker.WebhookServer != nil {
+		graceful(group, func() error { return app.HttpWorker.WebhookServer(groupCtx) })
+	}
 
-		// 建立 ready 檔案用來做 health check
-		if err := os.WriteFile("/tmp/ready", []byte("ok"), 0644); err != nil {
-			return err
-		}
-
-		// 不論是 producer 或 consumer 都要關閉
-		close(app.connReady)
-
-		// 開始監控連線狀態並自動重試
-		slog.Info("rabbitmq connection and topology ready")
-		return app.RabbitmqCM.WatchConnAndRetry(groupCtx)
-	})
-
-	graceful(group, func() error {
-		select {
-		case <-app.connReady:
-		case <-groupCtx.Done():
-			return groupCtx.Err()
-		}
-
-		// 每個 worker 各自用 graceful 啟動
-		for _, w := range app.Workers {
-			graceful(group, func() error { return w(groupCtx) })
-		}
-
-		return nil
-	})
+	if app.HttpWorker.GrpcServer != nil {
+		graceful(group, func() error { return app.HttpWorker.GrpcServer(groupCtx) })
+	}
 
 	// 等待所有 goroutine 結束
 	if err := group.Wait(); err != nil {
