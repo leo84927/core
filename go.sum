@@ -1,5 +1,5 @@
-buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617071229-6465fb4a4df5.1 h1:0PG9Y5s5e0NzjJqvjnxvLTQQZjmnBLUf3x1LBzcNBBs=
-buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617071229-6465fb4a4df5.1/go.mod h1:NFHp6NcKkJOUZY5R9ibniCf77ygufsvl/dCiujGXg5o=
+buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617092915-630856905b4e.1 h1:G5TobPPWgSVCmGBMdeczkQNSu94ZKi7j6mYHSsOtHz0=
+buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617092915-630856905b4e.1/go.mod h1:NFHp6NcKkJOUZY5R9ibniCf77ygufsvl/dCiujGXg5o=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 filippo.io/edwards25519 v1.2.0 h1:crnVqOiS4jqYleHd9vaKZ+HKtHfllngJIiOpNpoJsjo=
 filippo.io/edwards25519 v1.2.0/go.mod h1:xzAOLCNug/yB62zG1bQ8uziwrIqIuxhctzJT18Q77mc=

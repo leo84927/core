@@ -3,7 +3,7 @@ module github.com/leo84927/core
 go 1.26.1
 
 require (
-	buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617071229-6465fb4a4df5.1
+	buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go v1.36.11-20260617092915-630856905b4e.1
 	github.com/cenkalti/backoff/v5 v5.0.3
 	github.com/go-sql-driver/mysql v1.10.0
 	github.com/jmoiron/sqlx v1.4.0

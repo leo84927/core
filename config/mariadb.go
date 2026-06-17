@@ -32,6 +32,7 @@ func LoadMariaDbConfig() {
 	timeout := EnvMap[env.GlobalEnvKey_GLOBAL_MARIADB_TIMEOUT.String()]
 	readTimeout := EnvMap[env.GlobalEnvKey_GLOBAL_MARIADB_READ_TIMEOUT.String()]
 	writeTimeout := EnvMap[env.GlobalEnvKey_GLOBAL_MARIADB_WRITE_TIMEOUT.String()]
+	tlsCaPEM := EnvMap[env.GlobalEnvKey_GLOBAL_MARIADB_TLS_CA_PEM.String()]
 
 	mariadbCfg = mariadb.Config{
 		WriteDB: mariadb.DataSourceName{
@@ -45,6 +46,7 @@ func LoadMariaDbConfig() {
 			Timeout:      timeout,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
+			TLSCaPEM:     tlsCaPEM,
 		},
 		ReadDB: mariadb.DataSourceName{
 			User:         user,
@@ -57,6 +59,7 @@ func LoadMariaDbConfig() {
 			Timeout:      timeout,
 			ReadTimeout:  readTimeout,
 			WriteTimeout: writeTimeout,
+			TLSCaPEM:     tlsCaPEM,
 		},
 		MaxRetries:     uint(connMaxRetries),
 		MaxElapsedTime: connMaxElapsed,

@@ -1,10 +1,13 @@
 package mariadb
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -24,6 +27,8 @@ type DataSourceName struct {
 	MaxIdleConns    int           // 連線池中最多保留幾條閒置連線。閒置連線可以被下一次請求直接重用，避免重新建立連線的開銷。建議設為 MaxOpenConns 的一半以下。
 	ConnMaxLifetime time.Duration // 一條連線最長可以存活多久，超過後會被強制關閉並重建。可避免使用到因網路問題或 server 設定（wait_timeout）而已經失效的舊連線。
 	ConnMaxIdleTime time.Duration // 一條閒置連線最久可以放多久，超過後會被回收。在流量不穩定的服務中，可避免連線池中堆積大量用不到的閒置連線。
+
+	TLSCaPEM string
 }
 
 type Config struct {
@@ -33,7 +38,15 @@ type Config struct {
 	MaxElapsedTime time.Duration // 總重試時間上限
 }
 
+const tlsConfigName = "mariadb-tls"
+
 func (d DataSourceName) buildDB() (*sqlx.DB, error) {
+	if d.TLSCaPEM != "" {
+		if err := d.registerTLS(); err != nil {
+			return nil, permanentIfNeeded(err)
+		}
+	}
+
 	db, err := sqlx.Open("mysql", d.buildDSN())
 	if err != nil {
 		// sqlx.Open 只有在 dsn 格式錯誤時才會失敗
@@ -54,6 +67,16 @@ func (d DataSourceName) buildDB() (*sqlx.DB, error) {
 	return db, nil
 }
 
+func (d DataSourceName) registerTLS() error {
+	rootCAs := x509.NewCertPool()
+	if !rootCAs.AppendCertsFromPEM([]byte(d.TLSCaPEM)) {
+		return fmt.Errorf("failed to parse CA PEM")
+	}
+	return mysql.RegisterTLSConfig(tlsConfigName, &tls.Config{
+		RootCAs: rootCAs,
+	})
+}
+
 func (d DataSourceName) buildDSN() string {
 	dsn := fmt.Sprintf(
 		"%s:%s@tcp(%s:%s)/%s?charset=%s&parseTime=True&loc=UTC&collation=%s&timeout=%s&readTimeout=%s&writeTimeout=%s",
@@ -68,6 +91,10 @@ func (d DataSourceName) buildDSN() string {
 		d.ReadTimeout,
 		d.WriteTimeout,
 	)
+
+	if d.TLSCaPEM != "" {
+		dsn += "&tls=" + tlsConfigName
+	}
 
 	slog.Debug(
 		"buildDSN finish",
