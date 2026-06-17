@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	cp "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/consul"
+	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
 	"github.com/leo84927/core/redis"
 )
 
@@ -47,11 +47,11 @@ func InitFromRedis(ctx context.Context, prefix string) {
 	}
 
 	// 指定 logger 目標
-	GrafanaEndpoint = EnvMap[cp.GlobalEnvKey_GLOBAL_GRAFANA_ENDPOINT.String()]
-	GrafanaAuthHeader = EnvMap[cp.GlobalEnvKey_GLOBAL_GRAFANA_TOKEN.String()]
+	GrafanaEndpoint = EnvMap[env.GlobalEnvKey_GLOBAL_GRAFANA_ENDPOINT.String()]
+	GrafanaAuthHeader = EnvMap[env.GlobalEnvKey_GLOBAL_GRAFANA_TOKEN.String()]
 
 	// 指定時區
-	TimeZone = EnvMap[cp.GlobalEnvKey_GLOBAL_TIMEZONE.String()]
+	TimeZone = EnvMap[env.GlobalEnvKey_GLOBAL_TIMEZONE.String()]
 	if Loc, err = time.LoadLocation(TimeZone); err != nil {
 		log.Fatalf("load location failed, err: %v\n", err)
 	}
