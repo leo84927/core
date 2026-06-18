@@ -35,12 +35,12 @@ func InitFromRedis(ctx context.Context, prefix string) {
 	}
 
 	// 透過 redis 取得 global 環境變數，此時 EnvMap 為空可以直接指定
-	if EnvMap, err = List(ctx, "GLOBAL:*"); err != nil {
+	if EnvMap, err = list(ctx, "GLOBAL:*"); err != nil {
 		log.Fatalf("get env from redis failed, err: %v\n", err)
 	}
 
 	// 取得服務相關的環境變數，遍歷後指定給 EnvMap
-	if serviceMap, err := List(ctx, prefix+":*"); err != nil {
+	if serviceMap, err := list(ctx, prefix+":*"); err != nil {
 		log.Fatalf("get env from redis failed, err: %v\n", err)
 	} else {
 		maps.Copy(EnvMap, serviceMap)
@@ -57,7 +57,7 @@ func InitFromRedis(ctx context.Context, prefix string) {
 	}
 }
 
-func List(ctx context.Context, pattern string) (map[string]string, error) {
+func list(ctx context.Context, pattern string) (map[string]string, error) {
 	var keys []string
 
 	// 先用 Scan 取得符合 pattern 的 keys，再透過 Iterator 遍歷 keys，最後把 keys 存到 keys slice 中
@@ -70,23 +70,23 @@ func List(ctx context.Context, pattern string) (map[string]string, error) {
 	}
 
 	// 透過 MGet 取值，再轉換成 map 回傳
-	if len(keys) > 0 {
-		vals, err := RedisClient.MGet(ctx, keys...).Result()
-		if err != nil {
-			return nil, err
-		}
-
-		result := make(map[string]string, len(keys))
-		for i, val := range vals {
-			if val != nil {
-				// 把 key 中的 ":" 替換成 "_"
-				key := strings.ReplaceAll(keys[i], ":", "_")
-				result[key] = val.(string)
-			}
-		}
-
-		return result, nil
+	if len(keys) == 0 {
+		return nil, nil
 	}
 
-	return nil, nil
+	vals, err := RedisClient.MGet(ctx, keys...).Result()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string, len(keys))
+	for i, val := range vals {
+		if val != nil {
+			// 把 key 中的 ":" 替換成 "_"
+			key := strings.ReplaceAll(keys[i], ":", "_")
+			result[key] = val.(string)
+		}
+	}
+
+	return result, nil
 }

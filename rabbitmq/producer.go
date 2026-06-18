@@ -16,11 +16,7 @@ import (
 type amqpHeaderCarrier amqp.Table
 
 func (c amqpHeaderCarrier) Get(key string) string {
-	v, ok := c[key]
-	if !ok {
-		return ""
-	}
-	s, _ := v.(string)
+	s, _ := c[key].(string)
 	return s
 }
 

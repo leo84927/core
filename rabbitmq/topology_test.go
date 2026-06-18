@@ -45,10 +45,6 @@ func (m *mockChannel) QueueBind(name, key, exchange string, noWait bool, args am
 	return nil
 }
 
-func (m *mockChannel) Cancel(consumer string, noWait bool) error {
-	return nil
-}
-
 func (m *mockChannel) Close() error {
 	m.closed = true
 	return nil

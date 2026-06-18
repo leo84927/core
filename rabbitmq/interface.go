@@ -19,7 +19,6 @@ type AMQPChannel interface {
 	PublishWithDeferredConfirm(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error)
 	Qos(prefetchCount, prefetchSize int, global bool) error
 	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
-	Cancel(consumer string, noWait bool) error
 	Close() error
 }
 
@@ -129,12 +128,8 @@ func (d *amqpDelivery) Nack(multiple bool, requeue bool) error {
 }
 
 // ─────────────────────────────────────────────
-// Cancel & Close
+// Close
 // ─────────────────────────────────────────────
-
-func (c *amqpChannel) Cancel(consumer string, noWait bool) error {
-	return c.Channel.Cancel(consumer, noWait)
-}
 
 func (c *amqpChannel) Close() error {
 	return c.Channel.Close()
