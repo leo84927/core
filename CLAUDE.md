@@ -57,5 +57,9 @@ go get github.com/leo84927/core
 go get -u github.com/leo84927/core
 
 # 測試
-go test ./...
+go test ./rabbitmq/ -race -v -count=1
+# 含覆蓋率
+go test ./rabbitmq/ -race -v -count=1 -coverprofile=coverage.out
+# 好讀版
+gotestsum --format testname -- ./rabbitmq/ -race -v -count=1
 ```
