@@ -7,6 +7,7 @@ import (
 	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	otellog "go.opentelemetry.io/otel/log"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
 )
 
@@ -30,14 +31,21 @@ func (m *Manager) SetLogger(ctx context.Context) error {
 		sdklog.WithResource(m.resource),
 	)
 
-	handler := otelslog.NewHandler(
-		m.Config.ServiceName,
-		otelslog.WithLoggerProvider(m.logProvider),
-	)
-
-	slog.SetDefault(slog.New(handler))
+	slog.SetDefault(slog.New(newSlogHandler(m.Config.ServiceName, m.logProvider)))
 
 	return nil
+}
+
+// newSlogHandler 建立送往 OTEL 的 slog handler。
+// WithSource 讓每則日誌帶上 code.file.path / code.function.name / code.line.number，
+// 檔案路徑的裁剪靠建置時的 -trimpath（見根 CLAUDE.md 與 deploy.sh），
+// 否則會把建置機的絕對路徑寫進雲端日誌。
+func newSlogHandler(serviceName string, provider otellog.LoggerProvider) slog.Handler {
+	return otelslog.NewHandler(
+		serviceName,
+		otelslog.WithLoggerProvider(provider),
+		otelslog.WithSource(true),
+	)
 }
 
 func (m *Manager) setLogExporter(ctx context.Context) error {
