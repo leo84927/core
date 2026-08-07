@@ -2,11 +2,10 @@ package redis
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/leo84927/core/logger"
 	goredis "github.com/redis/go-redis/v9"
-	"github.com/rotisserie/eris"
 )
 
 type ConnectionManager struct {
@@ -35,12 +34,10 @@ func (cm *ConnectionManager) Client(ctx context.Context) (*goredis.Client, error
 	return cm.holder.get(), nil
 }
 
+// Close 沒有可用的請求 context（關閉時 signal context 通常已 canceled），用 Background
 func (cm *ConnectionManager) Close() {
 	if err := cm.holder.close(); err != nil {
-		slog.Error(
-			"failed to close redis",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(context.Background(), "failed to close redis", err)
 	}
 }
 

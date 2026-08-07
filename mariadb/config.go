@@ -1,6 +1,7 @@
 package mariadb
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -40,17 +41,17 @@ type Config struct {
 
 const tlsConfigName = "mariadb-tls"
 
-func (d DataSourceName) buildDB() (*sqlx.DB, error) {
+func (d DataSourceName) buildDB(ctx context.Context) (*sqlx.DB, error) {
 	if d.TLSCaPEM != "" {
 		if err := d.registerTLS(); err != nil {
-			return nil, permanentIfNeeded(err)
+			return nil, permanentIfNeeded(ctx, err)
 		}
 	}
 
 	db, err := sqlx.Open("mysql", d.buildDSN())
 	if err != nil {
 		// sqlx.Open 只有在 dsn 格式錯誤時才會失敗
-		return nil, permanentIfNeeded(err)
+		return nil, permanentIfNeeded(ctx, err)
 	}
 
 	db.SetMaxOpenConns(d.MaxOpenConns)
@@ -61,7 +62,7 @@ func (d DataSourceName) buildDB() (*sqlx.DB, error) {
 	// 實際連線
 	if err := db.Ping(); err != nil {
 		_ = db.Close()
-		return nil, permanentIfNeeded(err)
+		return nil, permanentIfNeeded(ctx, err)
 	}
 
 	return db, nil

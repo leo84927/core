@@ -11,7 +11,6 @@ import (
 	"github.com/leo84927/core/config"
 	"github.com/leo84927/core/logger"
 	"github.com/leo84927/core/rabbitmq"
-	"github.com/rotisserie/eris"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -86,10 +85,7 @@ func (app *App) Run(ctx context.Context) {
 
 	// 等待所有 goroutine 結束
 	if err := group.Wait(); err != nil {
-		slog.Error(
-			"shutdown with err",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(ctx, "shutdown with err", err)
 		return
 	}
 

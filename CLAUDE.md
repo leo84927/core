@@ -31,7 +31,8 @@ config.InitFromRedis(ctx, prefix)
 ## 共用設計模式
 
 ### 重試 + permanentIfNeeded
-rabbitmq 和 mariadb 都使用 `cenkalti/backoff` 搭配各自的 `permanentIfNeeded()` 分類錯誤：
+rabbitmq、mariadb、redis 都使用 `cenkalti/backoff` 搭配各自的 `permanentIfNeeded()` 分類錯誤
+（mariadb 與 redis 的版本會記錯誤日誌，因此簽章帶 `ctx`；rabbitmq 的不記日誌，維持只收 err）：
 - 不可重試（帳密錯誤、格式錯誤等）→ `backoff.Permanent` 立即停止
 - 可重試（網路瞬斷、連線數滿等）→ 交給 backoff 重試
 
@@ -56,6 +57,25 @@ producer 透過 `amqpHeaderCarrier` 將 traceparent 注入 AMQP headers（`otel.
 `code.file.path` 取自 binary 內記錄的編譯期路徑，**建置必須帶 `-trimpath`**，否則會把建置機的絕對路徑送進 Grafana Cloud。裁剪後 core 自身為 `github.com/leo84927/core/logger/log.go`（非 main module 一律用 module path），服務為 `telegram/handle/webhook.go`。詳見 monorepo 根目錄 `CLAUDE.md` 的「日誌來源路徑」。
 
 `newSlogHandler()` 把 provider 當參數收，是為了讓測試能塞進記憶體 provider，不必真的連到 Grafana。
+
+### 錯誤日誌入口
+**core 內的錯誤日誌一律走 `logger.Error(ctx, msg, err, args...)`，不要直接呼叫 `slog.Error`。**
+非錯誤等級（`slog.Info` / `slog.Debug`）不受此限，維持原樣。
+
+錯誤以 OTEL 語意慣例的 `exception.stacktrace` 輸出成**單一多行字串**（來自 `eris.ToString(err, true)`）。
+不用 `eris.ToJSON` 的巢狀 map，是因為那會在 Loki 端被展平成 `error_root_stack_0`、`error_root_stack_1`…
+每個堆疊框一個欄位，既難讀又可能觸及 structured metadata 上限。
+
+外部錯誤（driver、net 等）自身不帶 eris 堆疊，`eris.ToString` 對它們只會回傳「換行 + 訊息」。
+`stacktrace()` 會 TrimSpace 掉前導換行，並用入口擷取到的 PC 補上呼叫端的框，格式沿用 eris 的
+`func:file:line`。core 現有的錯誤幾乎全屬此類，沒有這層補償的話欄位會退化成單行。
+
+`logger.Error` 內部自己抓 caller PC 並組 `slog.Record`，而非轉呼叫 `slog.ErrorContext` —— `slog` 的來源位置
+是以寫死的跳層數擷取的，直接包一層會讓所有錯誤日誌的 `code.line.number` 指向 helper 內部。跳層數由
+`callerSkip` 常數控制，並由 `TestErrorReportsCallerLineNotHelperInternals` 把關；**若在入口與呼叫端之間再加
+一層包裝，該測試會失敗，記得同步調整 `callerSkip`**。
+
+決策脈絡與被否決的替代方案見 monorepo 根目錄 `docs/adr/0001-error-logging-entry-point.md`。
 
 ### Logger Close 模式
 `Manager.Close()` 使用 `context.WithTimeout(context.Background(), 5s)` 而非外部傳入的 ctx，因為呼叫時 signal context 通常已 canceled，需要獨立的 context 讓 provider 有時間 flush

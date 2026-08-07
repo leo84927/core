@@ -41,7 +41,7 @@ func (c *Config) buildClient(ctx context.Context) (*goredis.Client, error) {
 
 	if err := client.Ping(ctx).Err(); err != nil {
 		_ = client.Close()
-		return nil, permanentIfNeeded(err)
+		return nil, permanentIfNeeded(ctx, err)
 	}
 
 	return client, nil

@@ -1,73 +1,53 @@
 package redis
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
-	"log/slog"
 	"net/url"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/leo84927/core/logger"
 	goredis "github.com/redis/go-redis/v9"
-	"github.com/rotisserie/eris"
 )
 
-func permanentIfNeeded(err error) error {
+func permanentIfNeeded(ctx context.Context, err error) error {
 	if err == nil {
 		return nil
 	}
 
 	// URL 格式錯誤
 	if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
-		slog.Error(
-			"redis url formatting error",
-			"url", urlErr.URL,
-		)
+		logger.Error(ctx, "redis url formatting error", err, "url", urlErr.URL)
 		return backoff.Permanent(urlErr)
 	}
 
 	// TLS 憑證錯誤
 	if tlsErr := (*tls.CertificateVerificationError)(nil); errors.As(err, &tlsErr) {
-		slog.Error(
-			"redis tls certificate verification error",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(ctx, "redis tls certificate verification error", err)
 		return backoff.Permanent(tlsErr)
 	}
 
 	// Redis 錯誤
 	if redisErr := (goredis.Error)(nil); errors.As(err, &redisErr) {
-		msg := redisErr.Error()
-
 		// NOAUTH / WRONGPASS：密碼錯誤或未認證
 		if goredis.HasErrorPrefix(err, "NOAUTH") || goredis.HasErrorPrefix(err, "WRONGPASS") {
-			slog.Error(
-				"redis auth error",
-				"error", eris.ToJSON(err, true),
-			)
+			logger.Error(ctx, "redis auth error", err)
 			return backoff.Permanent(err)
 		}
 
 		// ERR DB index is out of range
 		if goredis.HasErrorPrefix(err, "ERR DB index") {
-			slog.Error(
-				"redis db index out of range",
-				"error", eris.ToJSON(err, true),
-			)
+			logger.Error(ctx, "redis db index out of range", err)
 			return backoff.Permanent(err)
 		}
 
 		// 其他 Redis 錯誤視為可重試
-		slog.Error(
-			"redis should retry error",
-			"error", msg,
-		)
+		logger.Error(ctx, "redis should retry error", err)
 		return err
 	}
 
 	// 其他可重試的錯誤（connection refused、i/o timeout 等）
-	slog.Error(
-		"should retry error",
-		"error", eris.ToJSON(err, true),
-	)
+	logger.Error(ctx, "should retry error", err)
 	return err
 }

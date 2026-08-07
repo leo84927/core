@@ -2,12 +2,11 @@ package mariadb
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/cenkalti/backoff/v5"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/rotisserie/eris"
+	"github.com/leo84927/core/logger"
 )
 
 type ConnectionManager struct {
@@ -32,19 +31,14 @@ func (cm *ConnectionManager) Read(ctx context.Context) (*sqlx.DB, error) {
 	return cm.lazyConnect(ctx, &cm.read, cm.config.ReadDB)
 }
 
+// Close 沒有可用的請求 context（關閉時 signal context 通常已 canceled），用 Background
 func (cm *ConnectionManager) Close() {
 	if err := cm.write.close(); err != nil {
-		slog.Error(
-			"failed to close writeDB",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(context.Background(), "failed to close writeDB", err)
 	}
 
 	if err := cm.read.close(); err != nil {
-		slog.Error(
-			"failed to close readDB",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(context.Background(), "failed to close readDB", err)
 	}
 }
 
@@ -68,7 +62,7 @@ func (cm *ConnectionManager) setDBWithRetry(ctx context.Context, holder *dbHolde
 	db, err := backoff.Retry(
 		ctx,
 		func() (*sqlx.DB, error) {
-			return dsn.buildDB()
+			return dsn.buildDB(ctx)
 		},
 		backoff.WithMaxElapsedTime(cm.config.MaxElapsedTime),
 		backoff.WithMaxTries(cm.config.MaxRetries),

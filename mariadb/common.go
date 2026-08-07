@@ -1,17 +1,17 @@
 package mariadb
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
-	"log/slog"
 	"net/url"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/go-sql-driver/mysql"
-	"github.com/rotisserie/eris"
+	"github.com/leo84927/core/logger"
 )
 
-func permanentIfNeeded(err error) error {
+func permanentIfNeeded(ctx context.Context, err error) error {
 	// 先判斷 err 是否為 nil，減少開銷（防呆）
 	if err == nil {
 		return nil
@@ -19,19 +19,13 @@ func permanentIfNeeded(err error) error {
 
 	// DSN 格式錯誤
 	if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
-		slog.Error(
-			"dsn formatting error",
-			"dsn", urlErr.URL,
-		)
+		logger.Error(ctx, "dsn formatting error", err, "dsn", urlErr.URL)
 		return backoff.Permanent(urlErr)
 	}
 
 	// TLS 憑證錯誤
 	if tlsErr := (*tls.CertificateVerificationError)(nil); errors.As(err, &tlsErr) {
-		slog.Error(
-			"redis tls certificate verification error",
-			"error", eris.ToJSON(err, true),
-		)
+		logger.Error(ctx, "mariadb tls certificate verification error", err)
 		return backoff.Permanent(tlsErr)
 	}
 
@@ -50,10 +44,7 @@ func permanentIfNeeded(err error) error {
 			1251, // Client does not support authentication protocol
 			1275: // Server is running in safe mode
 
-			slog.Error(
-				"mysql can't retry error",
-				"error", eris.ToJSON(mysqlErr, true),
-			)
+			logger.Error(ctx, "mysql can't retry error", mysqlErr)
 			return backoff.Permanent(mysqlErr)
 		default:
 			// 可重試的錯誤（e.g. 1040 too many connections、網路瞬斷）
@@ -62,9 +53,6 @@ func permanentIfNeeded(err error) error {
 	}
 
 	// 其他可重試的錯誤（e.g. connection refused、i/o timeout）
-	slog.Error(
-		"should retry error",
-		"error", eris.ToJSON(err, true),
-	)
+	logger.Error(ctx, "should retry error", err)
 	return err
 }
