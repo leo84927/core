@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
+	"github.com/rotisserie/eris"
 )
 
 type Exchange struct {
@@ -34,7 +35,7 @@ func (cm *ConnectionManager) InitTopology(ctx context.Context, topology Topology
 
 		ch, err := conn.Channel()
 		if err != nil {
-			return struct{}{}, permanentIfNeeded(err)
+			return struct{}{}, permanentIfNeeded(eris.Wrap(err, "failed to open a channel"))
 		}
 		defer func() {
 			_ = ch.Close()
@@ -54,7 +55,7 @@ func (cm *ConnectionManager) InitTopology(ctx context.Context, topology Topology
 		backoff.WithMaxTries(topology.MaxRetries),
 	)
 	if err != nil {
-		return err
+		return unwrapPermanent(err)
 	}
 
 	// 寫入宣告成功的 topology，重連時 replay
@@ -75,7 +76,7 @@ func (cm *ConnectionManager) declareTopology(ch AMQPChannel, topology Topology) 
 		nil,                    // args
 	)
 	if err != nil {
-		return err
+		return eris.Wrap(err, "failed to declare exchange")
 	}
 
 	// 有幾個 Queue 就 declare 幾次
@@ -89,7 +90,7 @@ func (cm *ConnectionManager) declareTopology(ch AMQPChannel, topology Topology) 
 			nil,        // args
 		)
 		if err != nil {
-			return err
+			return eris.Wrap(err, "failed to declare queue")
 		}
 
 		// 綁定 Exchange 和當前的 Queue
@@ -97,7 +98,7 @@ func (cm *ConnectionManager) declareTopology(ch AMQPChannel, topology Topology) 
 			// 有幾個規則就綁定幾次
 			err = ch.QueueBind(queue.Name, key, topology.Exchange.Name, false, nil)
 			if err != nil {
-				return err
+				return eris.Wrap(err, "failed to bind queue")
 			}
 		}
 	}

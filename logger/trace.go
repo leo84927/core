@@ -51,7 +51,7 @@ func (m *Manager) setTraceExporter(ctx context.Context) error {
 
 	exporter, err := otlptracehttp.New(ctx, opts...)
 	if err != nil {
-		return eris.Cause(err)
+		return eris.Wrap(err, "new otlp trace exporter failed")
 	}
 
 	m.traceExporter = exporter

@@ -1,11 +1,16 @@
 package rabbitmq
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/leo84927/core/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -90,13 +95,8 @@ func TestWaitForConsume_ConnectFails(t *testing.T) {
 
 // Channel() 失敗時，應回傳 error
 func TestWaitForConsume_ChannelFails(t *testing.T) {
-	mock := newMockConn()
-	mock.channelFunc = func() (AMQPChannel, error) {
-		return nil, errors.New("channel open failed")
-	}
-
 	cm := newTestConnectionManager()
-	cm.conn = mock
+	cm.conn = newMockConnWithChannelError(errors.New("channel open failed"))
 
 	consumer := newTestConsumer(cm)
 	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
@@ -231,6 +231,118 @@ func TestWaitForConsume_ChannelClosedAfterDone(t *testing.T) {
 	}
 	if err != nil && err.Error() != "channel closed" {
 		t.Fatalf("expected channel closed, got: %v", err)
+	}
+}
+
+// ─────────────────────────────────────────────
+// Tests: 錯誤攜帶堆疊
+// ─────────────────────────────────────────────
+
+// consumer 中斷（msgs channel 關閉）是 Grafana 上最常見的那則錯誤，必須自誕生起就帶堆疊
+func TestWaitForConsume_MsgsChannelClosed_CarriesStack(t *testing.T) {
+	ch := &mockChannel{
+		consumeFunc: func(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
+			return deliveryChannel(), nil // 空的且已關閉
+		},
+	}
+
+	cm := newTestConnectionManager()
+	cm.conn = newMockConnWithChannel(ch)
+
+	consumer := newTestConsumer(cm)
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+		return false, nil
+	})
+
+	assertCarriesStack(t, err, "rabbitmq.(*Consumer).subscribeAndWait")
+}
+
+/*
+ * 把 rabbitmq 的錯誤與 core 的錯誤日誌入口串起來：consumer 中斷的錯誤經 logger.Error 記錄後
+ * exception.stacktrace 必須看得到 rabbitmq 套件內的框，否則就是「錯誤有堆疊但日誌沒帶到」
+ */
+func TestWaitForConsume_MsgsChannelClosed_StacktraceReachesLog(t *testing.T) {
+	var buf bytes.Buffer
+	original := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, nil)))
+	t.Cleanup(func() { slog.SetDefault(original) })
+
+	ch := &mockChannel{
+		consumeFunc: func(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
+			return deliveryChannel(), nil // 空的且已關閉
+		},
+	}
+
+	cm := newTestConnectionManager()
+	cm.conn = newMockConnWithChannel(ch)
+
+	consumer := newTestConsumer(cm)
+	err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+		return false, nil
+	})
+
+	logger.Error(context.Background(), "consumer interrupted", err)
+
+	// slog.SetDefault 會把 log 套件的輸出也導進同一個 handler，所以 buffer 裡不只一筆，取帶堆疊的那筆
+	var stacktrace string
+	decoder := json.NewDecoder(&buf)
+	for decoder.More() {
+		var record struct {
+			Stacktrace string `json:"exception.stacktrace"`
+		}
+		if err := decoder.Decode(&record); err != nil {
+			t.Fatalf("解析日誌失敗：%v", err)
+		}
+		if record.Stacktrace != "" {
+			stacktrace = record.Stacktrace
+		}
+	}
+
+	if !strings.Contains(stacktrace, "rabbitmq.(*Consumer).subscribeAndWait") {
+		t.Errorf("exception.stacktrace =\n%s\n期望看得到 rabbitmq 套件內的框", stacktrace)
+	}
+}
+
+// amqp091 回傳的外部錯誤自身沒有堆疊，必須在 rabbitmq 邊界補上，否則堆疊裡看不到任何 rabbitmq 的框
+func TestWaitForConsume_ExternalErrorsCarryStack(t *testing.T) {
+	tests := []struct {
+		name string
+		conn AMQPConnection
+	}{
+		{
+			name: "Channel 失敗",
+			conn: newMockConnWithChannelError(errors.New("channel open failed")),
+		},
+		{
+			name: "Qos 失敗",
+			conn: newMockConnWithChannel(&mockChannel{
+				qosFunc: func(prefetchCount, prefetchSize int, global bool) error {
+					return errors.New("qos failed")
+				},
+			}),
+		},
+		{
+			name: "Consume 失敗",
+			conn: newMockConnWithChannel(&mockChannel{
+				consumeFunc: func(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
+					return nil, errors.New("consume failed")
+				},
+			}),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := newTestConnectionManager()
+			cm.conn = tt.conn
+
+			consumer := newTestConsumer(cm)
+			err := consumer.WaitForConsume(context.Background(), func(ctx context.Context, msg Message, _ PublishHandler) (bool, error) {
+				return false, nil
+			})
+
+			assertCarriesStack(t, err, "rabbitmq.(*Consumer).subscribeAndWait")
+		})
 	}
 }
 

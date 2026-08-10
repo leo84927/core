@@ -13,6 +13,7 @@ import (
 
 	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rotisserie/eris"
 )
 
 type Config struct {
@@ -144,7 +145,7 @@ func (cm *ConnectionManager) getConn() (AMQPConnection, error) {
 	defer cm.mutex.RUnlock()
 
 	if cm.conn == nil || cm.conn.IsClosed() {
-		return nil, fmt.Errorf("no active connection")
+		return nil, eris.New("no active connection")
 	}
 	return cm.conn, nil
 }
@@ -163,7 +164,7 @@ func (cm *ConnectionManager) setConnWithRetry(ctx context.Context) error {
 	)
 	if err != nil {
 		log.Println("setConnWithRetry failed, err:", err.Error())
-		return err
+		return unwrapPermanent(err)
 	}
 
 	cm.mutex.Lock()
@@ -192,7 +193,11 @@ func (config *Config) buildConnection() (*amqp.Connection, error) {
 		},
 	)
 	if err != nil {
-		return nil, permanentIfNeeded(err)
+		/**
+		 * amqp091 的錯誤自身不帶堆疊，在收到它的這一刻（我們能控制的最早一刻）就用 eris.Wrap 包起來
+		 * 才擷取得到 rabbitmq 的框；rabbitmq 內所有外部錯誤的邊界都比照辦理，詳見 core/CLAUDE.md
+		 */
+		return nil, permanentIfNeeded(eris.Wrap(err, "dial amqp failed"))
 	}
 
 	return conn, nil

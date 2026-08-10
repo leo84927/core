@@ -64,7 +64,7 @@ func (m *Manager) setResource(ctx context.Context) error {
 		),
 	)
 	if err != nil {
-		return eris.Cause(err)
+		return eris.Wrap(err, "new otel resource failed")
 	}
 
 	m.resource = res

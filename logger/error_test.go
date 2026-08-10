@@ -159,6 +159,24 @@ func TestErrorStacktraceHasNoLeadingBlankLine(t *testing.T) {
 	}
 }
 
+// logger 自己回傳的錯誤不可被 eris.Cause 拆解到最底層，否則呼叫端收到的錯誤既沒有堆疊也沒有包裝訊息
+func TestSetLogExporterErrorKeepsChainAndStack(t *testing.T) {
+	// endpoint 帶空白，otlploghttp 會在組 request 時失敗，不會真的連到 Grafana
+	manager := NewManager(&Config{ServiceName: "test", Endpoint: "invalid endpoint"})
+
+	err := manager.setLogExporter(context.Background())
+	if err == nil {
+		t.Fatal("期望 endpoint 不合法時回傳 error")
+	}
+
+	if len(eris.StackFrames(err)) == 0 {
+		t.Errorf("錯誤不帶 eris 堆疊：%v（eris.Cause 會把堆疊與包裝鏈一起丟掉）", err)
+	}
+	if !strings.Contains(eris.ToString(err, true), "logger.(*Manager).setLogExporter") {
+		t.Errorf("堆疊 =\n%s\n期望含 logger 套件內的框", eris.ToString(err, true))
+	}
+}
+
 // err 為 nil 時不該 panic，也不該憑空生出堆疊
 func TestErrorWithNilError(t *testing.T) {
 	processor := useTestLogger(t)

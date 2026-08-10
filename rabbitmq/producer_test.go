@@ -2,6 +2,7 @@ package rabbitmq
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -72,13 +73,8 @@ func TestPublishWithRetry_ConnectFails(t *testing.T) {
 
 // Channel() 失敗時，應回傳 error
 func TestPublishWithRetry_ChannelFails(t *testing.T) {
-	mock := newMockConn()
-	mock.channelFunc = func() (AMQPChannel, error) {
-		return nil, errors.New("channel open failed")
-	}
-
 	cm := newTestConnectionManager()
-	cm.conn = mock
+	cm.conn = newMockConnWithChannelError(errors.New("channel open failed"))
 
 	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
 
@@ -138,6 +134,66 @@ func TestPublishWithRetry_NotConfirmed(t *testing.T) {
 
 	if err == nil {
 		t.Fatal("expected error when broker does not confirm")
+	}
+}
+
+// ─────────────────────────────────────────────
+// Tests: 錯誤攜帶堆疊
+// ─────────────────────────────────────────────
+
+// broker 沒 confirm 的錯誤誕生在 rabbitmq 內，必須帶堆疊
+func TestPublishWithRetry_NotConfirmed_CarriesStack(t *testing.T) {
+	ch := &mockChannel{
+		publishWithDeferredConfirmFunc: func(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error) {
+			return &mockDeferredConfirmation{confirmed: false}, nil
+		},
+	}
+
+	cm := newTestConnectionManager()
+	cm.conn = newMockConnWithChannel(ch)
+
+	err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+
+	assertCarriesStack(t, err, "rabbitmq.(*ConnectionManager).PublishWithRetry")
+}
+
+// amqp091 回傳的外部錯誤自身沒有堆疊，必須在 rabbitmq 邊界補上
+func TestPublishWithRetry_ExternalErrorsCarryStack(t *testing.T) {
+	tests := []struct {
+		name string
+		conn AMQPConnection
+	}{
+		{
+			name: "Channel 失敗",
+			conn: newMockConnWithChannelError(errors.New("channel open failed")),
+		},
+		{
+			name: "Confirm 失敗",
+			conn: newMockConnWithChannel(&mockChannel{
+				confirmFunc: func(noWait bool) error {
+					return errors.New("confirm mode failed")
+				},
+			}),
+		},
+		{
+			name: "PublishWithDeferredConfirm 失敗",
+			conn: newMockConnWithChannel(&mockChannel{
+				publishWithDeferredConfirmFunc: func(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error) {
+					return nil, errors.New("publish failed")
+				},
+			}),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := newTestConnectionManager()
+			cm.conn = tt.conn
+
+			err := cm.PublishWithRetry(t.Context(), "test.exchange", "key.1", []byte("hello"), 1, 1*time.Second)
+
+			assertCarriesStack(t, err, "rabbitmq.(*ConnectionManager).PublishWithRetry")
+		})
 	}
 }
 
@@ -234,7 +290,8 @@ func TestPublishWithRetry_ChannelClosedAfterFailure(t *testing.T) {
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")
 	}
-	if err != nil && err.Error() != "confirm mode failed" {
+	// 錯誤在邊界會被 eris.Wrap 補上堆疊與情境，訊息裡仍要看得到底層的原因
+	if err != nil && !strings.Contains(err.Error(), "confirm mode failed") {
 		t.Fatalf("expected confirm mode failed, got: %v", err)
 	}
 }

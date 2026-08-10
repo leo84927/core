@@ -129,7 +129,8 @@ func (m *Manager) setLogExporter(ctx context.Context) error {
 
 	exporter, err := otlploghttp.New(ctx, opts...)
 	if err != nil {
-		return eris.Cause(err)
+		// 不能用 eris.Cause 拆到最底層，那會把包裝鏈連同堆疊一起丟掉；改用 eris.Wrap 讓錯誤自誕生起就帶堆疊
+		return eris.Wrap(err, "new otlp log exporter failed")
 	}
 
 	m.logExporter = exporter

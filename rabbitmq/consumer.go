@@ -2,12 +2,12 @@ package rabbitmq
 
 import (
 	"context"
-	"errors"
 	"log"
 	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
+	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -53,7 +53,7 @@ func (c *Consumer) WaitForConsume(ctx context.Context, handler MsgHandler) error
 		backoff.WithMaxTries(c.MaxRetries),
 		backoff.WithMaxElapsedTime(c.MaxElpasedTime),
 	)
-	return err
+	return unwrapPermanent(err)
 }
 
 func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) error {
@@ -66,7 +66,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	ch, err := conn.Channel()
 	if err != nil {
 		log.Println("failed to open a channel:", err.Error())
-		return err
+		return eris.Wrap(err, "failed to open a channel")
 	}
 	defer func() {
 		/**
@@ -84,7 +84,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	)
 	if err != nil {
 		log.Println("failed to set QoS:", err.Error())
-		return err
+		return eris.Wrap(err, "failed to set QoS")
 	}
 
 	// 訂閱 queue
@@ -99,7 +99,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 	)
 	if err != nil {
 		log.Println("failed to register a consumer:", err.Error())
-		return err
+		return eris.Wrap(err, "failed to register a consumer")
 	}
 
 	for {
@@ -108,7 +108,7 @@ func (c *Consumer) subscribeAndWait(ctx context.Context, handler MsgHandler) err
 			if !ok {
 				// 當連線異常時，ok 會是 false，此時停止 consumer 並讓外層重試
 				log.Println("channel closed, exiting consumer")
-				return errors.New("channel closed")
+				return eris.New("channel closed")
 			}
 
 			c.handleDelivery(ctx, &amqpDelivery{&d}, Message{Body: d.Body}, d.Headers, handler)

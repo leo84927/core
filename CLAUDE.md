@@ -68,7 +68,8 @@ producer 透過 `amqpHeaderCarrier` 將 traceparent 注入 AMQP headers（`otel.
 
 外部錯誤（driver、net 等）自身不帶 eris 堆疊，`eris.ToString` 對它們只會回傳「換行 + 訊息」。
 `stacktrace()` 會 TrimSpace 掉前導換行，並用入口擷取到的 PC 補上呼叫端的框，格式沿用 eris 的
-`func:file:line`。core 現有的錯誤幾乎全屬此類，沒有這層補償的話欄位會退化成單行。
+`func:file:line`。`rabbitmq` 的錯誤已改為自誕生起就帶堆疊（見下方「錯誤源頭攜帶堆疊」），
+這層補償是 `mariadb` / `redis` / 其他仍未包裝的外部錯誤的備援，沒有它那些欄位會退化成單行。
 
 `logger.Error` 內部自己抓 caller PC 並組 `slog.Record`，而非轉呼叫 `slog.ErrorContext` —— `slog` 的來源位置
 是以寫死的跳層數擷取的，直接包一層會讓所有錯誤日誌的 `code.line.number` 指向 helper 內部。跳層數由
@@ -76,6 +77,30 @@ producer 透過 `amqpHeaderCarrier` 將 traceparent 注入 AMQP headers（`otel.
 一層包裝，該測試會失敗，記得同步調整 `callerSkip`**。
 
 決策脈絡與被否決的替代方案見 monorepo 根目錄 `docs/adr/0001-error-logging-entry-point.md`。
+
+### 錯誤源頭攜帶堆疊
+**`rabbitmq` 內誕生的錯誤一律用 `eris.New`；外部錯誤（amqp091）在收到的第一時間用 `eris.Wrap` 包起來。**
+eris 的堆疊只能在 `eris.New` / `eris.Wrap` 當下擷取，事後補救只會抓到記錄日誌那一行，對除錯沒有價值。
+外部錯誤的「誕生」在 amqp091 內，我們能控制的最早一刻就是收到它的那一行，所以包裝點放在邊界：
+`amqp.DialConfig`、`conn.Channel`、`ch.Qos`、`ch.Consume`、`ch.Confirm`、`PublishWithDeferredConfirm`、
+`ExchangeDeclare` / `QueueDeclare` / `QueueBind`。
+
+**不主動丟棄錯誤包裝鏈。** `rabbitmq` 的 `permanentIfNeeded` 只負責分類，`errors.As` 取出的 `*url.Error` /
+`*tls.CertificateVerificationError` / `*amqp.Error` 僅用於判斷與記錄，**回傳一律是原本的 err**
+（`backoff.Permanent(err)`）；換成底層錯誤會把包裝鏈連同堆疊一起丟掉。同理 `logger` 內不再用 `eris.Cause`，
+改為 `eris.Wrap`。
+
+`backoff.Retry` 的錯誤出口一律經過 `unwrapPermanent()`：`backoff` 只有在「還沒用完重試次數」時才會自己解開
+`Permanent`，若不可重試的錯誤剛好落在最後一次嘗試，回傳的最外層會是 `*backoff.PermanentError`（非 eris 型別），
+`eris` 只認得最外層，堆疊會整條看不到。`backoff` 的包裝屬於重試機制的內部細節，本來就不該外流給呼叫端。
+
+**尚未套用的範圍：** `mariadb` / `redis` 的 `permanentIfNeeded` 仍回傳 `errors.As` 取出的底層錯誤，
+且其外部錯誤沒有在邊界包裝，因此它們的 `exception.stacktrace` 仍靠 `logger.Error` 的 PC 補償。
+`rabbitmq` 內只 log 不回傳的錯誤（`d.Ack` / `d.Nack` 失敗、`ConnectionManager.Close()`）也還是 `log.Println`，
+不走 `logger.Error`，因此不會有 `exception.stacktrace`。這兩塊要另開票。
+
+另外 `rabbitmq` 的 `log.Println` 在 `SetLogger` 之後會流進 slog（`slog.SetDefault` 會接管 `log` 套件的輸出），
+所以那些訊息會以 INFO 進 Grafana；錯誤要有堆疊，靠的是錯誤本身往上傳到服務端以 `logger.Error` 記錄。
 
 ### Logger Close 模式
 `Manager.Close()` 使用 `context.WithTimeout(context.Background(), 5s)` 而非外部傳入的 ctx，因為呼叫時 signal context 通常已 canceled，需要獨立的 context 讓 provider 有時間 flush

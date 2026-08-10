@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -119,13 +120,8 @@ func TestInitTopology_ConnectFails(t *testing.T) {
 
 // Channel() 失敗時，InitTopology 應回傳 error 且不存入 topology
 func TestInitTopology_ChannelFails(t *testing.T) {
-	mock := newMockConn()
-	mock.channelFunc = func() (AMQPChannel, error) {
-		return nil, errors.New("channel open failed")
-	}
-
 	cm := newTestConnectionManager()
-	cm.conn = mock
+	cm.conn = newMockConnWithChannelError(errors.New("channel open failed"))
 
 	err := cm.InitTopology(t.Context(), newTestTopology())
 	if err == nil {
@@ -291,9 +287,67 @@ func TestDeclareTopology_ChannelClosedAfterFailure(t *testing.T) {
 	if !ch.closed {
 		t.Fatal("expected channel to be closed even after failure")
 	}
-	if err != nil && err.Error() != "exchange declare failed" {
+	// 錯誤在邊界會被 eris.Wrap 補上堆疊與情境，訊息裡仍要看得到底層的原因
+	if err != nil && !strings.Contains(err.Error(), "exchange declare failed") {
 		t.Fatalf("expected exchange declare failed, got: %v", err)
 	}
+}
+
+// ─────────────────────────────────────────────
+// Tests: 錯誤攜帶堆疊
+// ─────────────────────────────────────────────
+
+// declare 失敗是 amqp091 的外部錯誤，必須在 rabbitmq 邊界補上堆疊
+func TestDeclareTopology_ErrorsCarryStack(t *testing.T) {
+	tests := []struct {
+		name    string
+		channel *mockChannel
+	}{
+		{
+			name: "ExchangeDeclare 失敗",
+			channel: &mockChannel{
+				exchangeDeclareFunc: func(name, kind string, durable, autoDelete, internal, noWait bool, args amqp.Table) error {
+					return errors.New("exchange declare failed")
+				},
+			},
+		},
+		{
+			name: "QueueDeclare 失敗",
+			channel: &mockChannel{
+				queueDeclareFunc: func(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error) {
+					return amqp.Queue{}, errors.New("queue declare failed")
+				},
+			},
+		},
+		{
+			name: "QueueBind 失敗",
+			channel: &mockChannel{
+				queueBindFunc: func(name, key, exchange string, noWait bool, args amqp.Table) error {
+					return errors.New("queue bind failed")
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cm := newTestConnectionManager()
+
+			err := cm.declareTopology(tt.channel, newTestTopology())
+
+			assertCarriesStack(t, err, "rabbitmq.(*ConnectionManager).declareTopology")
+		})
+	}
+}
+
+// InitTopology 取 channel 失敗時的外部錯誤同樣要帶堆疊
+func TestInitTopology_ChannelFails_CarriesStack(t *testing.T) {
+	cm := newTestConnectionManager()
+	cm.conn = newMockConnWithChannelError(errors.New("channel open failed"))
+
+	err := cm.InitTopology(t.Context(), newTestTopology())
+
+	assertCarriesStack(t, err, "rabbitmq.(*ConnectionManager).InitTopology")
 }
 
 // ─────────────────────────────────────────────

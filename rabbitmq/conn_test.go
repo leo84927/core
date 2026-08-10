@@ -182,6 +182,32 @@ func TestGetConn_ClosedConn(t *testing.T) {
 }
 
 // ─────────────────────────────────────────────
+// Tests: 錯誤攜帶堆疊
+// ─────────────────────────────────────────────
+
+// 「沒有可用連線」誕生在 rabbitmq 內，必須帶堆疊
+func TestGetConn_NoConnection_CarriesStack(t *testing.T) {
+	cm := newTestConnectionManager()
+
+	_, err := cm.getConn()
+
+	assertCarriesStack(t, err, "rabbitmq.(*ConnectionManager).getConn")
+}
+
+// dial 失敗是 amqp091 的外部錯誤，必須在 buildConnection 當下就補上堆疊
+func TestBuildConnection_DialFails_CarriesStack(t *testing.T) {
+	// URI 帶空白，amqp091 會在解析階段就失敗，不會真的連到 broker
+	config := &Config{
+		Host: "invalid host",
+		Port: "5672",
+	}
+
+	_, err := config.buildConnection()
+
+	assertCarriesStack(t, err, "rabbitmq.(*Config).buildConnection")
+}
+
+// ─────────────────────────────────────────────
 // Tests: Close()
 // ─────────────────────────────────────────────
 
