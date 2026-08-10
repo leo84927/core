@@ -54,7 +54,7 @@ producer 透過 `amqpHeaderCarrier` 將 traceparent 注入 AMQP headers（`otel.
 | `code.function.name` | 呼叫點的函式名稱 |
 | `code.line.number` | 呼叫點的行號 |
 
-`code.file.path` 取自 binary 內記錄的編譯期路徑，**建置必須帶 `-trimpath`**，否則會把建置機的絕對路徑送進 Grafana Cloud。裁剪後 core 自身為 `github.com/leo84927/core/logger/log.go`（非 main module 一律用 module path），服務為 `telegram/handle/webhook.go`。詳見 monorepo 根目錄 `CLAUDE.md` 的「日誌來源路徑」。
+`code.file.path` 取自編譯期路徑，**所有建置管道都必須帶 `-trimpath`**；理由、裁剪後的路徑形式與建置管道清單見 monorepo 的 `.claude/rules/deployment.md`「日誌來源路徑」。
 
 `newSlogHandler()` 把 provider 當參數收，是為了讓測試能塞進記憶體 provider，不必真的連到 Grafana。
 
@@ -62,45 +62,32 @@ producer 透過 `amqpHeaderCarrier` 將 traceparent 注入 AMQP headers（`otel.
 **core 內的錯誤日誌一律走 `logger.Error(ctx, msg, err, args...)`，不要直接呼叫 `slog.Error`。**
 非錯誤等級（`slog.Info` / `slog.Debug`）不受此限，維持原樣。
 
-錯誤以 OTEL 語意慣例的 `exception.stacktrace` 輸出成**單一多行字串**（來自 `eris.ToString(err, true)`）。
-不用 `eris.ToJSON` 的巢狀 map，是因為那會在 Loki 端被展平成 `error_root_stack_0`、`error_root_stack_1`…
-每個堆疊框一個欄位，既難讀又可能觸及 structured metadata 上限。
+錯誤以 OTEL 語意慣例的 `exception.stacktrace` 輸出成**單一多行字串**（`eris.ToString(err, true)`）；
+自身不帶 eris 堆疊的外部錯誤，由 `stacktrace()` 用入口擷取到的 PC 補上呼叫端的框。`rabbitmq` 的錯誤已改為
+自誕生起就帶堆疊（見下方），這層補償是 `mariadb` / `redis` 等尚未包裝者的備援。
+格式選擇、被否決的替代方案與決策脈絡見 monorepo 根目錄 `docs/adr/0001-error-logging-entry-point.md`。
 
-外部錯誤（driver、net 等）自身不帶 eris 堆疊，`eris.ToString` 對它們只會回傳「換行 + 訊息」。
-`stacktrace()` 會 TrimSpace 掉前導換行，並用入口擷取到的 PC 補上呼叫端的框，格式沿用 eris 的
-`func:file:line`。`rabbitmq` 的錯誤已改為自誕生起就帶堆疊（見下方「錯誤源頭攜帶堆疊」），
-這層補償是 `mariadb` / `redis` / 其他仍未包裝的外部錯誤的備援，沒有它那些欄位會退化成單行。
-
-`logger.Error` 內部自己抓 caller PC 並組 `slog.Record`，而非轉呼叫 `slog.ErrorContext` —— `slog` 的來源位置
-是以寫死的跳層數擷取的，直接包一層會讓所有錯誤日誌的 `code.line.number` 指向 helper 內部。跳層數由
-`callerSkip` 常數控制，並由 `TestErrorReportsCallerLineNotHelperInternals` 把關；**若在入口與呼叫端之間再加
-一層包裝，該測試會失敗，記得同步調整 `callerSkip`**。
-
-決策脈絡與被否決的替代方案見 monorepo 根目錄 `docs/adr/0001-error-logging-entry-point.md`。
+**維護注意：** `logger.Error` 自己抓 caller PC 並組 `slog.Record`，跳層數由 `callerSkip` 常數控制。
+若在入口與呼叫端之間再加一層包裝，`TestErrorReportsCallerLineNotHelperInternals` 會失敗，
+記得同步調整 `callerSkip`。
 
 ### 錯誤源頭攜帶堆疊
-**`rabbitmq` 內誕生的錯誤一律用 `eris.New`；外部錯誤（amqp091）在收到的第一時間用 `eris.Wrap` 包起來。**
 eris 的堆疊只能在 `eris.New` / `eris.Wrap` 當下擷取，事後補救只會抓到記錄日誌那一行，對除錯沒有價值。
-外部錯誤的「誕生」在 amqp091 內，我們能控制的最早一刻就是收到它的那一行，所以包裝點放在邊界：
-`amqp.DialConfig`、`conn.Channel`、`ch.Qos`、`ch.Consume`、`ch.Confirm`、`PublishWithDeferredConfirm`、
-`ExchangeDeclare` / `QueueDeclare` / `QueueBind`。
+因此 `rabbitmq`：
 
-**不主動丟棄錯誤包裝鏈。** `rabbitmq` 的 `permanentIfNeeded` 只負責分類，`errors.As` 取出的 `*url.Error` /
-`*tls.CertificateVerificationError` / `*amqp.Error` 僅用於判斷與記錄，**回傳一律是原本的 err**
-（`backoff.Permanent(err)`）；換成底層錯誤會把包裝鏈連同堆疊一起丟掉。同理 `logger` 內不再用 `eris.Cause`，
-改為 `eris.Wrap`。
+- 自己誕生的錯誤用 `eris.New`；amqp091 的外部錯誤在收到的第一時間用 `eris.Wrap` 包起來，邊界為
+  `amqp.DialConfig`、`conn.Channel`、`ch.Qos`、`ch.Consume`、`ch.Confirm`、`PublishWithDeferredConfirm`、
+  `ExchangeDeclare` / `QueueDeclare` / `QueueBind`
+- `permanentIfNeeded` 只負責分類，回傳一律是原本的 err —— 換成 `errors.As` 取出的底層錯誤
+  （`*url.Error` / `*tls.CertificateVerificationError` / `*amqp.Error`）會把包裝鏈連同堆疊丟掉
+- `backoff.Retry` 的錯誤出口一律經過 `unwrapPermanent()`：`backoff` 只有在還沒用完重試次數時才會自己解開
+  `Permanent`，非 eris 的最外層會讓 `eris` 找不到堆疊，而那層包裝本來也不該外流給呼叫端
+- `logger` 內同理不再用 `eris.Cause`，改為 `eris.Wrap`
 
-`backoff.Retry` 的錯誤出口一律經過 `unwrapPermanent()`：`backoff` 只有在「還沒用完重試次數」時才會自己解開
-`Permanent`，若不可重試的錯誤剛好落在最後一次嘗試，回傳的最外層會是 `*backoff.PermanentError`（非 eris 型別），
-`eris` 只認得最外層，堆疊會整條看不到。`backoff` 的包裝屬於重試機制的內部細節，本來就不該外流給呼叫端。
-
-**尚未套用的範圍：** `mariadb` / `redis` 的 `permanentIfNeeded` 仍回傳 `errors.As` 取出的底層錯誤，
-且其外部錯誤沒有在邊界包裝，因此它們的 `exception.stacktrace` 仍靠 `logger.Error` 的 PC 補償。
-`rabbitmq` 內只 log 不回傳的錯誤（`d.Ack` / `d.Nack` 失敗、`ConnectionManager.Close()`）也還是 `log.Println`，
-不走 `logger.Error`，因此不會有 `exception.stacktrace`。這兩塊要另開票。
-
-另外 `rabbitmq` 的 `log.Println` 在 `SetLogger` 之後會流進 slog（`slog.SetDefault` 會接管 `log` 套件的輸出），
-所以那些訊息會以 INFO 進 Grafana；錯誤要有堆疊，靠的是錯誤本身往上傳到服務端以 `logger.Error` 記錄。
+**尚未套用：** `mariadb` / `redis` 的 `permanentIfNeeded` 仍回傳底層錯誤、外部錯誤也沒在邊界包裝；
+`rabbitmq` 內只 log 不回傳的錯誤（`d.Ack` / `d.Nack`、`ConnectionManager.Close()`）還是 `log.Println`，
+不會有 `exception.stacktrace`。這兩塊要另開票。另外 `slog.SetDefault` 會接管 `log` 套件的輸出，
+所以那些 `log.Println` 會以 INFO 進 Grafana。
 
 ### Logger Close 模式
 `Manager.Close()` 使用 `context.WithTimeout(context.Background(), 5s)` 而非外部傳入的 ctx，因為呼叫時 signal context 通常已 canceled，需要獨立的 context 讓 provider 有時間 flush
