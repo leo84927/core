@@ -11,10 +11,11 @@ import (
 )
 
 type mockConn struct {
-	mu          sync.Mutex
-	closed      bool
-	closeCh     chan *amqp.Error
-	channelFunc func() (AMQPChannel, error)
+	mu            sync.Mutex
+	closed        bool
+	closeDeadline time.Time
+	closeCh       chan *amqp.Error
+	channelFunc   func() (AMQPChannel, error)
 }
 
 func (m *mockConn) IsClosed() bool {
@@ -23,10 +24,11 @@ func (m *mockConn) IsClosed() bool {
 	return m.closed
 }
 
-func (m *mockConn) Close() error {
+func (m *mockConn) CloseDeadline(deadline time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.closed = true
+	m.closeDeadline = deadline
 	return nil
 }
 
@@ -221,6 +223,31 @@ func TestClose_ClosesActiveConn(t *testing.T) {
 
 	if !mock.IsClosed() {
 		t.Fatal("expected connection to be closed after Close()")
+	}
+}
+
+/*
+ * 關閉連線必須帶 deadline：amqp091 的 Close() 會無限期等 broker 回 close-ok，
+ * 而它排在 OTLP flush 前面，卡住的話關機當下的診斷資訊全滅
+ */
+func TestClose_PassesDeadline(t *testing.T) {
+	cm := newTestConnectionManager()
+	mock := newMockConn()
+	cm.conn = mock
+
+	before := time.Now()
+	cm.Close()
+	after := time.Now()
+
+	mock.mu.Lock()
+	deadline := mock.closeDeadline
+	mock.mu.Unlock()
+
+	if deadline.IsZero() {
+		t.Fatal("期望關閉連線時帶上 deadline，不可無限期等待")
+	}
+	if deadline.Before(before.Add(closeTimeout)) || deadline.After(after.Add(closeTimeout)) {
+		t.Errorf("deadline = %v，期望約為呼叫當下 +%v", deadline, closeTimeout)
 	}
 }
 

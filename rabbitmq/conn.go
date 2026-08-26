@@ -16,6 +16,9 @@ import (
 	"github.com/rotisserie/eris"
 )
 
+// 關閉 AMQP 連線的等待上限
+const closeTimeout = 5 * time.Second
+
 type Config struct {
 	ServiceName    string
 	User           string
@@ -106,7 +109,7 @@ func (cm *ConnectionManager) Close() {
 		return
 	}
 
-	err = conn.Close()
+	err = conn.CloseDeadline(time.Now().Add(closeTimeout))
 	if err != nil {
 		log.Println("Close failed, err:", err.Error())
 		return

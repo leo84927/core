@@ -79,7 +79,11 @@ func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key
 			return struct{}{}, permanentIfNeeded(eris.Wrap(err, "failed to publish message"))
 		}
 
-		if confirmed := confirm.Wait(); !confirmed {
+		confirmed, err := confirm.WaitContext(ctx)
+		if err != nil {
+			return struct{}{}, eris.Wrap(err, "failed to wait for publish confirmation")
+		}
+		if !confirmed {
 			return struct{}{}, eris.New("publish message failed")
 		}
 

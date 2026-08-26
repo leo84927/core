@@ -16,8 +16,8 @@ import (
 
 type Config struct {
 	ServiceName string
-	Endpoint    string
-	AuthHeader  string
+	Endpoint    string // Grafana Endpoint
+	AuthHeader  string // Grafana Token
 }
 
 type Manager struct {
@@ -35,21 +35,32 @@ func NewManager(config *Config) *Manager {
 	}
 }
 
-func (m *Manager) Close() {
-	// 由於 close 時還會做 flush，如果使用傳進來的 ctx，會因為 ctx 早已先被取消，導致觸發 err；改成使用新的 ctx，並設定 timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+/*
+ * shutdownTimeout 是「每一個」exporter 各自的 flush 上限，不是兩者共用的總預算。
+ * 共用一個 ctx 的話，log flush 慢就會把 trace 餓死 —— 而關機出問題時最需要看的正是 trace。
+ */
+const shutdownTimeout = 5 * time.Second
 
+func (m *Manager) Close() {
 	if m.logProvider != nil {
-		if err := m.logProvider.Shutdown(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, eris.Wrap(err, "shutdown log provider failed"))
-		}
+		shutdown(m.logProvider.Shutdown, "shutdown log provider failed")
 	}
 
 	if m.traceProvider != nil {
-		if err := m.traceProvider.Shutdown(ctx); err != nil {
-			fmt.Fprintln(os.Stderr, eris.Wrap(err, "shutdown trace provider failed"))
-		}
+		shutdown(m.traceProvider.Shutdown, "shutdown trace provider failed")
+	}
+}
+
+func shutdown(fn func(context.Context) error, msg string) {
+	/* 
+	 * 由於 close 時還會做 flush，如果使用傳進來的 ctx，會因為 ctx 早已先被取消，導致觸發 err
+	 * 改成使用新的 ctx，並設定 timeout
+	 */
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	if err := fn(ctx); err != nil {
+		fmt.Fprintln(os.Stderr, eris.Wrap(err, msg))
 	}
 }
 

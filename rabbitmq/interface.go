@@ -1,12 +1,15 @@
 package rabbitmq
 
 import (
+	"context"
+	"time"
+
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 type AMQPConnection interface {
 	IsClosed() bool
-	Close() error
+	CloseDeadline(deadline time.Time) error
 	NotifyClose(c chan *amqp.Error) chan *amqp.Error
 	Channel() (AMQPChannel, error)
 }
@@ -23,7 +26,7 @@ type AMQPChannel interface {
 }
 
 type AMQPDeferredConfirmation interface {
-	Wait() bool
+	WaitContext(ctx context.Context) (bool, error)
 }
 
 type AMQPDelivery interface {
@@ -55,8 +58,12 @@ func (c *amqpConnection) IsClosed() bool {
 	return c.Connection.IsClosed()
 }
 
-func (c *amqpConnection) Close() error {
-	return c.Connection.Close()
+/*
+ * 關機路徑用 CloseDeadline()
+ * 原本的 Close() 會無限期等 broker 回 close-ok，而它排在 OTLP flush 前面，卡住的話診斷資訊全滅
+ */
+func (c *amqpConnection) CloseDeadline(deadline time.Time) error {
+	return c.Connection.CloseDeadline(deadline)
 }
 
 func (c *amqpConnection) NotifyClose(ch chan *amqp.Error) chan *amqp.Error {
@@ -103,8 +110,12 @@ func (c *amqpChannel) PublishWithDeferredConfirm(exchange, key string, mandatory
 	return &amqpDeferredConfirmation{confirm}, nil
 }
 
-func (c *amqpDeferredConfirmation) Wait() bool {
-	return c.DeferredConfirmation.Wait()
+/*
+ * 等待 broker 回 confirm 必須吃 ctx
+ * 原本的 Wait() 沒有上限，而 consumer 的 handler 包含 publish，關機時若卡在這裡就只能等 systemd 強殺
+ */
+func (c *amqpDeferredConfirmation) WaitContext(ctx context.Context) (bool, error) {
+	return c.DeferredConfirmation.WaitContext(ctx)
 }
 
 // ─────────────────────────────────────────────

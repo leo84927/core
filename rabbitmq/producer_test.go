@@ -1,6 +1,7 @@
 package rabbitmq
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -15,10 +16,18 @@ import (
 
 type mockDeferredConfirmation struct {
 	confirmed bool
+	block     chan struct{} // 非 nil 時，等到它關閉或 ctx 取消才回應，用來模擬 broker 遲遲不回 confirm
 }
 
-func (m *mockDeferredConfirmation) Wait() bool {
-	return m.confirmed
+func (m *mockDeferredConfirmation) WaitContext(ctx context.Context) (bool, error) {
+	if m.block != nil {
+		select {
+		case <-m.block:
+		case <-ctx.Done():
+			return false, ctx.Err()
+		}
+	}
+	return m.confirmed, nil
 }
 
 var _ AMQPDeferredConfirmation = (*mockDeferredConfirmation)(nil)
@@ -293,5 +302,43 @@ func TestPublishWithRetry_ChannelClosedAfterFailure(t *testing.T) {
 	// 錯誤在邊界會被 eris.Wrap 補上堆疊與情境，訊息裡仍要看得到底層的原因
 	if err != nil && !strings.Contains(err.Error(), "confirm mode failed") {
 		t.Fatalf("expected confirm mode failed, got: %v", err)
+	}
+}
+
+/*
+ * 等 broker 回 confirm 必須吃 ctx：發布現在跑在 consumer 的 drain 裡面（handler 同步執行），
+ * 而 drain 刻意不設上限。若這裡沒有上限，關機就會無限期掛住，連 OTLP flush 都輪不到，
+ * 最後只能等 systemd 強殺 —— drain 的保護歸零
+ */
+func TestPublishWithRetry_ContextCancelUnblocksConfirmWait(t *testing.T) {
+	waiting := make(chan struct{})
+
+	ch := &mockChannel{
+		publishWithDeferredConfirmFunc: func(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) (AMQPDeferredConfirmation, error) {
+			close(waiting)
+			// 永遠不關閉：模擬 broker 收下發布卻不回 confirm
+			return &mockDeferredConfirmation{block: make(chan struct{})}, nil
+		},
+	}
+
+	cm := newTestConnectionManager()
+	cm.conn = newMockConnWithChannel(ch)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- cm.PublishWithRetry(ctx, "test.exchange", "test.key", []byte("body"), 1, 1*time.Second)
+	}()
+
+	<-waiting
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("期望 ctx 取消時回傳 error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("ctx 取消後仍卡在等 confirm，關機會無限期掛住")
 	}
 }
