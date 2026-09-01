@@ -1,79 +1,46 @@
 package config
 
 import (
-	"log"
-	"strconv"
-	"time"
-
 	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
 	"github.com/leo84927/core/rabbitmq"
 )
 
-var rabbitmqCfg RabbitMQ
-
 type RabbitMQ struct {
-	Config       *rabbitmq.Config
-	Topology     rabbitmq.Topology
-	ServiceQueue rabbitmq.Queue
+	Config   rabbitmq.Config
+	Topology rabbitmq.Topology
+	Queue    *rabbitmq.Queue // nil = 只當 producer
 }
 
-func LoadBasicRabbitMQ() {
-	connMaxRetries, err := strconv.Atoi(EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_RETRIES.String()])
-	if err != nil {
-		log.Printf("transfer RABBITMQ_CONN_MAX_RETRIES failed, invalid value: %v, error: %v\n", EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_RETRIES.String()], err)
-		connMaxRetries = 5
-	}
-	connMaxElapsed, err := time.ParseDuration(EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_ELAPSED_TIME.String()])
-	if err != nil {
-		log.Printf("transfer RABBITMQ_CONN_MAX_ELAPSED_TIME failed, invalid value: %v, error: %v\n", EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_ELAPSED_TIME.String()], err)
-		connMaxElapsed = 20 * time.Second
-	}
-
-	rabbitmqCfg.Config = &rabbitmq.Config{
-		ServiceName:    ServiceName,
-		User:           EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_USER.String()],
-		Password:       EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_PASSWORD.String()],
-		Host:           EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_HOST.String()],
-		Port:           EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_PORT.String()],
-		Vhost:          EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_VHOST.String()],
-		MaxRetries:     uint(connMaxRetries),
-		MaxElapsedTime: connMaxElapsed,
-	}
-}
-
-// 若只是 producer，只需基本的 topology
-func LoadBasicTopology() {
-	rabbitmqCfg.Topology.Exchange.Name = EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_JOB_EXCHANGE.String()]
-}
-
-// 若是 consumer，就需要完整的 topology
-func LoadCompleteTopology(serviceQueue rabbitmq.Queue) {
-	topologyMaxRetries, err := strconv.Atoi(EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_RETRIES.String()])
-	if err != nil {
-		log.Printf("transfer RABBITMQ_TOPOLOGY_MAX_RETRIES failed, invalid value: %v, error: %v\n", EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_RETRIES.String()], err)
-		topologyMaxRetries = 3
-	}
-	topologyMaxElapsed, err := time.ParseDuration(EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_ELAPSED_TIME.String()])
-	if err != nil {
-		log.Printf("transfer RABBITMQ_TOPOLOGY_MAX_ELAPSED_TIME failed, invalid value: %v, error: %v\n", EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_ELAPSED_TIME.String()], err)
-		topologyMaxElapsed = 20 * time.Second
-	}
-
-	rabbitmqCfg.Topology = rabbitmq.Topology{
-		Exchange: rabbitmq.Exchange{
-			Name: EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_JOB_EXCHANGE.String()],
-			Kind: EnvMap[env.GlobalEnvKey_GLOBAL_RABBITMQ_EXCHANGE_KIND.String()],
+func (r *reader) rabbitMQ(serviceName string, keys *QueueKeys) RabbitMQ {
+	cfg := RabbitMQ{
+		Config: rabbitmq.Config{
+			ServiceName:    serviceName,
+			User:           r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_USER),
+			Password:       r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_PASSWORD),
+			Host:           r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_HOST),
+			Port:           r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_PORT),
+			Vhost:          r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_VHOST),
+			MaxRetries:     r.uint(env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_RETRIES),
+			MaxElapsedTime: r.duration(env.GlobalEnvKey_GLOBAL_RABBITMQ_CONN_MAX_ELAPSED_TIME),
 		},
-		Queues: []rabbitmq.Queue{
-			serviceQueue,
-		},
-		MaxRetries:     uint(topologyMaxRetries),
-		MaxElpasedTime: topologyMaxElapsed,
+	}
+	cfg.Topology.Exchange.Name = r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_JOB_EXCHANGE)
+
+	// 只是 producer 就只需要基本的 topology（宣告 exchange），不需要 queue binding 那幾個鍵
+	if keys == nil {
+		return cfg
 	}
 
-	rabbitmqCfg.ServiceQueue = serviceQueue
-}
+	queue := rabbitmq.Queue{
+		Name: r.str(keys.NameKey),
+		Keys: []string{r.str(keys.RoutingKey)},
+	}
 
-func GetRabbitMQConfig() RabbitMQ {
-	return rabbitmqCfg
+	cfg.Queue = &queue
+	cfg.Topology.Exchange.Kind = r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_EXCHANGE_KIND)
+	cfg.Topology.Queues = []rabbitmq.Queue{queue}
+	cfg.Topology.MaxRetries = r.uint(env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_RETRIES)
+	cfg.Topology.MaxElapsedTime = r.duration(env.GlobalEnvKey_GLOBAL_RABBITMQ_TOPOLOGY_MAX_ELAPSED_TIME)
+
+	return cfg
 }

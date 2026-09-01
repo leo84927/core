@@ -5,7 +5,6 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
-	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	"github.com/leo84927/core/logger"
@@ -26,18 +25,16 @@ import (
 const prefetchCount = 4
 
 type Consumer struct {
-	cm             *ConnectionManager
-	queue          string
-	tag            string
-	MaxRetries     uint          // 最大重試次數上限
-	MaxElpasedTime time.Duration // 總重試時間上限
+	cm    *ConnectionManager
+	queue string
+	tag   string
 }
 
 type Message struct {
 	Body []byte
 }
 
-type PublishHandler func(ctx context.Context, exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error
+type PublishHandler func(ctx context.Context, exchange, key string, body []byte) error
 
 /*
  * MsgHandler 只回傳 error：worker 一律同步執行，回傳代表工作真的做完了。
@@ -45,14 +42,12 @@ type PublishHandler func(ctx context.Context, exchange, key string, body []byte,
  */
 type MsgHandler func(context.Context, Message, PublishHandler) error
 
-func (cm *ConnectionManager) NewConsumer(queue, tag string, maxRetries uint, maxElpasedTime time.Duration) *Consumer {
+func (cm *ConnectionManager) NewConsumer(queue, tag string) *Consumer {
 	// 不在這裡建立 channel，延遲到 consume 時才建
 	return &Consumer{
-		cm:             cm,
-		queue:          queue,
-		tag:            tag,
-		MaxRetries:     maxRetries,
-		MaxElpasedTime: maxElpasedTime,
+		cm:    cm,
+		queue: queue,
+		tag:   tag,
 	}
 }
 
@@ -62,11 +57,12 @@ func (c *Consumer) WaitForConsume(ctx context.Context, handler MsgHandler) error
 		return struct{}{}, permanentIfNeeded(err)
 	}
 
+	budget := c.cm.Config.consume
 	_, err := backoff.Retry(
 		ctx,
 		operation,
-		backoff.WithMaxTries(c.MaxRetries),
-		backoff.WithMaxElapsedTime(c.MaxElpasedTime),
+		backoff.WithMaxTries(budget.maxRetries),
+		backoff.WithMaxElapsedTime(budget.maxElapsedTime),
 	)
 	return unwrapPermanent(err)
 }

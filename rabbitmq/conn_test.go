@@ -75,10 +75,19 @@ func (m *mockConn) simulateNormalClose() {
 // ─────────────────────────────────────────────
 
 func newTestConnectionManager() *ConnectionManager {
-	return NewConnectionManager(&Config{
+	cm := NewConnectionManager(&Config{
 		MaxElapsedTime: 1 * time.Second,
 		MaxRetries:     1,
 	})
+
+	/*
+	 * 消費重連預算的正式值是 {5, 20s}（「願意容忍 broker 斷線多久才自我了結」），
+	 * 在測試裡等那 20 秒沒有意義，縮成一次。發布預算沿用正式值，重試行為本身就是被測對象。
+	 * 正式值本身由 TestNewConnectionManager_RetryBudgets 釘住。
+	 */
+	cm.Config.consume = retryBudget{maxRetries: 1, maxElapsedTime: 1 * time.Second}
+
+	return cm
 }
 
 // ─────────────────────────────────────────────
@@ -324,10 +333,10 @@ func TestWatchConnAndRetry_UnexpectedClose_ReconnectFails(t *testing.T) {
 
 	/**
 	 * 沒加 sleep 的情況
-	 * 1. simulateUnexpectedClose() 在 connect() 之前執行，導致 connect() 判斷 conn 已壞 -> 持續重試 dial，直到 MaxElpasedTime 或 MaxRetries 達到上限
+	 * 1. simulateUnexpectedClose() 在 connect() 之前執行，導致 connect() 判斷 conn 已壞 -> 持續重試 dial，直到 MaxElapsedTime 或 MaxRetries 達到上限
 	 * 2. simulateUnexpectedClose() 在 connect() 之後 conn.NotifyClose 之前執行，導致 close 的是舊 channel，監聽的是新 channel -> 永遠收不到關閉訊號，測試逾時
-	 * 3. simulateUnexpectedClose() 在 conn.NotifyClose 之後執行 -> 正常接收 amqpErr，持續重試 dial，直到 MaxElpasedTime 或 MaxRetries 達到上限，測試通過
-	 * 4. simulateUnexpectedClose() 在 for select 之後執行 -> 正常接收 amqpErr，持續重試 dial，直到 MaxElpasedTime 或 MaxRetries 達到上限，測試通過
+	 * 3. simulateUnexpectedClose() 在 conn.NotifyClose 之後執行 -> 正常接收 amqpErr，持續重試 dial，直到 MaxElapsedTime 或 MaxRetries 達到上限，測試通過
+	 * 4. simulateUnexpectedClose() 在 for select 之後執行 -> 正常接收 amqpErr，持續重試 dial，直到 MaxElapsedTime 或 MaxRetries 達到上限，測試通過
 	 * 加 sleep 讓 simulateUnexpectedClose() 幾乎都在 conn.NotifyClose 之後執行，確保測試穩定通過
 	 */
 	time.Sleep(100 * time.Millisecond)
@@ -472,5 +481,34 @@ func TestBuildUrl_EmptyVhost(t *testing.T) {
 
 	if url != expected {
 		t.Fatalf("expected %q, got %q", expected, url)
+	}
+}
+
+// ─────────────────────────────────────────────
+// Tests: 重試預算
+// ─────────────────────────────────────────────
+
+/*
+ * 三組預算語意不同，刻意分開：連線重連走設定鍵，發布重試與消費重連寫死常數。
+ * 後兩組不是匯出欄位，呼叫端無從逐點亂填 —— 改動前它們是尾綴位置引數，
+ * 同一個預算在 codebase 裡有 3, 5s 與 3, 10（10 奈秒）兩個不同答案。
+ */
+func TestNewConnectionManager_RetryBudgets(t *testing.T) {
+	cm := NewConnectionManager(&Config{
+		MaxRetries:     7,
+		MaxElapsedTime: 30 * time.Second,
+	})
+
+	if want := (retryBudget{maxRetries: 3, maxElapsedTime: 5 * time.Second}); cm.Config.publish != want {
+		t.Errorf("expected publish budget %+v, got %+v", want, cm.Config.publish)
+	}
+	if want := (retryBudget{maxRetries: 5, maxElapsedTime: 20 * time.Second}); cm.Config.consume != want {
+		t.Errorf("expected consume budget %+v, got %+v", want, cm.Config.consume)
+	}
+
+	// 連線重連預算來自設定鍵，不該被寫死常數蓋掉
+	if cm.Config.MaxRetries != 7 || cm.Config.MaxElapsedTime != 30*time.Second {
+		t.Errorf("expected the connection budget to stay as configured, got {%d, %v}",
+			cm.Config.MaxRetries, cm.Config.MaxElapsedTime)
 	}
 }

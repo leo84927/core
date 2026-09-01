@@ -21,7 +21,7 @@ type Queue struct {
 type Topology struct {
 	Exchange       Exchange      // 一個 Exchange
 	Queues         []Queue       // 對應多個 Queue
-	MaxElpasedTime time.Duration // 總重試時間上限
+	MaxElapsedTime time.Duration // 總重試時間上限
 	MaxRetries     uint          // 最大重試次數上限
 }
 
@@ -51,7 +51,7 @@ func (cm *ConnectionManager) InitTopology(ctx context.Context, topology Topology
 	_, err := backoff.Retry(
 		ctx,
 		operation,
-		backoff.WithMaxElapsedTime(topology.MaxElpasedTime),
+		backoff.WithMaxElapsedTime(topology.MaxElapsedTime),
 		backoff.WithMaxTries(topology.MaxRetries),
 	)
 	if err != nil {

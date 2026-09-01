@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"context"
-	"time"
 
 	"github.com/cenkalti/backoff/v5"
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -32,7 +31,7 @@ func (c amqpHeaderCarrier) Keys() []string {
 	return keys
 }
 
-func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key string, body []byte, maxRetries uint, maxElapsedTime time.Duration) error {
+func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key string, body []byte) error {
 	ctx, span := otel.Tracer("rabbitmq").Start(ctx, "publish",
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
@@ -90,11 +89,12 @@ func (cm *ConnectionManager) PublishWithRetry(ctx context.Context, exchange, key
 		return struct{}{}, nil
 	}
 
+	budget := cm.Config.publish
 	_, err := backoff.Retry(
 		ctx,
 		operation,
-		backoff.WithMaxTries(maxRetries),
-		backoff.WithMaxElapsedTime(maxElapsedTime),
+		backoff.WithMaxTries(budget.maxRetries),
+		backoff.WithMaxElapsedTime(budget.maxElapsedTime),
 	)
 	if err != nil {
 		err = unwrapPermanent(err)

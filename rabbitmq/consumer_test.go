@@ -64,7 +64,7 @@ func (m *mockDelivery) Nack(multiple bool, requeue bool) error {
 // ─────────────────────────────────────────────
 
 func newTestConsumer(cm *ConnectionManager) *Consumer {
-	return cm.NewConsumer("test.queue", "test-tag", 1, 1*time.Second)
+	return cm.NewConsumer("test.queue", "test-tag")
 }
 
 // 建立一個送出指定訊息後關閉的 msgs channel

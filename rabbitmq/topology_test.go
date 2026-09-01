@@ -74,7 +74,7 @@ func newTestTopology() Topology {
 				Keys: []string{"key.3"},
 			},
 		},
-		MaxElpasedTime: 1 * time.Second,
+		MaxElapsedTime: 1 * time.Second,
 		MaxRetries:     1,
 	}
 }

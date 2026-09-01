@@ -19,6 +19,11 @@ import (
 // 關閉 AMQP 連線的等待上限
 const closeTimeout = 5 * time.Second
 
+type retryBudget struct {
+	maxRetries     uint
+	maxElapsedTime time.Duration
+}
+
 type Config struct {
 	ServiceName    string
 	User           string
@@ -26,8 +31,11 @@ type Config struct {
 	Host           string
 	Port           string
 	Vhost          string
-	MaxRetries     uint          // 最大重試次數上限
-	MaxElapsedTime time.Duration // 總重試時間上限
+	MaxRetries     uint          // 連線重連的最大重試次數上限
+	MaxElapsedTime time.Duration // 連線重連的總重試時間上限
+
+	publish retryBudget // 單次發布的重試預算，PublishWithRetry 用
+	consume retryBudget // 消費重連的預算，WaitForConsume 用
 }
 
 type ConnectionManager struct {
@@ -42,6 +50,10 @@ type ConnectionManager struct {
 }
 
 func NewConnectionManager(config *Config) *ConnectionManager {
+	// 發布重試與消費重連兩組預算寫死在這裡
+	config.publish = retryBudget{maxRetries: 3, maxElapsedTime: 5 * time.Second}
+	config.consume = retryBudget{maxRetries: 5, maxElapsedTime: 20 * time.Second}
+
 	cm := &ConnectionManager{
 		Config: config,
 	}
@@ -138,6 +150,15 @@ func (cm *ConnectionManager) connect(ctx context.Context) (AMQPConnection, error
 	if err != nil {
 		return nil, err
 	}
+
+	/*
+	 * 這個讀取一樣要上鎖：singleflight 只排序「呼叫端與自己那一輪 flight」，
+	 * 後續的另一輪（例如 broker 閃斷後 WatchConnAndRetry 觸發的重連）會在
+	 * setConnWithRetry 內以 Lock 寫入 cm.conn，與這裡的讀取併發。
+	 * per-message goroutine 各自呼叫 PublishWithRetry → connect 之後，這條路是常態併發。
+	 */
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
 
 	return cm.conn, nil
 }

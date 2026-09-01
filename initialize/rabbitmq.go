@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/leo84927/core/config"
 	"github.com/leo84927/core/rabbitmq"
 )
 
@@ -12,13 +11,14 @@ type MQWorker struct {
 	RabbitmqCM *rabbitmq.ConnectionManager
 	Consumer   *rabbitmq.Consumer
 	connReady  chan struct{}
+	topology   rabbitmq.Topology // 由 New 從 Settings 填入，不再回頭讀套件層變數
 	MsgHandler rabbitmq.MsgHandler
 }
 
 func (worker *MQWorker) ConnectionExecution(ctx context.Context) error {
 	if worker.MsgHandler != nil {
 		// 建立連線＆拓樸
-		if err := worker.RabbitmqCM.InitTopology(ctx, config.GetRabbitMQConfig().Topology); err != nil {
+		if err := worker.RabbitmqCM.InitTopology(ctx, worker.topology); err != nil {
 			return err
 		}
 	}
