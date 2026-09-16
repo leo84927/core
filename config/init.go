@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	_ "time/tzdata"
+
 	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
 	"github.com/leo84927/core/logger"
 	"github.com/leo84927/core/mariadb"
