@@ -13,9 +13,9 @@ import (
 	_ "time/tzdata"
 
 	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
-	"github.com/leo84927/core/logger"
-	"github.com/leo84927/core/mariadb"
-	"github.com/leo84927/core/redis"
+	"github.com/leo84927/core/v2/logger"
+	"github.com/leo84927/core/v2/mariadb"
+	"github.com/leo84927/core/v2/redis"
 	goredis "github.com/redis/go-redis/v9"
 )
 

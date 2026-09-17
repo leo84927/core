@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/leo84927/core/logger"
+	"github.com/leo84927/core/v2/logger"
 	goredis "github.com/redis/go-redis/v9"
 )
 

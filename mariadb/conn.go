@@ -6,7 +6,7 @@ import (
 	"github.com/cenkalti/backoff/v5"
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/jmoiron/sqlx"
-	"github.com/leo84927/core/logger"
+	"github.com/leo84927/core/v2/logger"
 )
 
 type ConnectionManager struct {

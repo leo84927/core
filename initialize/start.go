@@ -7,9 +7,9 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/leo84927/core/config"
-	"github.com/leo84927/core/logger"
-	"github.com/leo84927/core/rabbitmq"
+	"github.com/leo84927/core/v2/config"
+	"github.com/leo84927/core/v2/logger"
+	"github.com/leo84927/core/v2/rabbitmq"
 	"golang.org/x/sync/errgroup"
 )
 

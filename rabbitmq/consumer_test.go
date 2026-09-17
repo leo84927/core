@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/leo84927/core/logger"
+	"github.com/leo84927/core/v2/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

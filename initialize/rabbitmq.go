@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/leo84927/core/rabbitmq"
+	"github.com/leo84927/core/v2/rabbitmq"
 )
 
 type MQWorker struct {

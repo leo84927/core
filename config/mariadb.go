@@ -4,7 +4,7 @@ import (
 	"time"
 
 	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
-	"github.com/leo84927/core/mariadb"
+	"github.com/leo84927/core/v2/mariadb"
 )
 
 // 只有宣告 Spec.MariaDB 的服務才讀這 14 個鍵

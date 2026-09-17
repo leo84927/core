@@ -2,7 +2,7 @@ package config
 
 import (
 	env "buf.build/gen/go/leo84927-proto/scheduler/protocolbuffers/go/env"
-	"github.com/leo84927/core/rabbitmq"
+	"github.com/leo84927/core/v2/rabbitmq"
 )
 
 type RabbitMQ struct {

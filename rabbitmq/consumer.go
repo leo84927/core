@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/cenkalti/backoff/v5"
-	"github.com/leo84927/core/logger"
+	"github.com/leo84927/core/v2/logger"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/rotisserie/eris"
 	"go.opentelemetry.io/otel"

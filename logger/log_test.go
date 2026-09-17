@@ -93,7 +93,7 @@ func TestCallerFilePathIsNotAbsoluteWhenTrimmed(t *testing.T) {
 	if strings.HasPrefix(filePath, "/") {
 		t.Skipf("此次建置未帶 -trimpath，path = %q", filePath)
 	}
-	if !strings.HasPrefix(filePath, "github.com/leo84927/core/logger/") {
-		t.Errorf("code.file.path = %q, 期望以模組路徑 github.com/leo84927/core/logger/ 開頭", filePath)
+	if !strings.HasPrefix(filePath, "github.com/leo84927/core/v2/logger/") {
+		t.Errorf("code.file.path = %q, 期望以模組路徑 github.com/leo84927/core/v2/logger/ 開頭", filePath)
 	}
 }
