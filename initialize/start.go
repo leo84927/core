@@ -83,7 +83,7 @@ func (app *App) Close(ctx context.Context) {
 	}
 }
 
-func (app *App) Run(ctx context.Context) {
+func (app *App) Run(ctx context.Context) error {
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	// New 無條件建立連線管理器，所以這一段不再有條件
@@ -104,10 +104,11 @@ func (app *App) Run(ctx context.Context) {
 	// 等待所有 goroutine 結束
 	if err := group.Wait(); err != nil {
 		logger.Error(ctx, "shutdown with err", err)
-		return
+		return err
 	}
 
 	slog.Info("normal shutdown")
+	return nil
 }
 
 // 包裝 errgroup，就可以不用每個 goroutine 都宣告 defer recover
