@@ -70,17 +70,16 @@ func New(ctx context.Context, settings config.Settings, app *App) (*App, error) 
 	return app, nil
 }
 
+/*
+ * Close 只負責配對關閉資源，刻意不 recover。
+ * goroutine 內的 panic 另由 graceful 收成 errgroup 的 error。
+ */
 func (app *App) Close(ctx context.Context) {
 	if app.MQWorker.RabbitmqCM != nil {
 		app.MQWorker.RabbitmqCM.Close()
 	}
 
 	app.logManager.Close()
-
-	if r := recover(); r != nil {
-		err := fmt.Errorf("recovered: %v\n%s", r, debug.Stack())
-		fmt.Fprintln(os.Stderr, err)
-	}
 }
 
 func (app *App) Run(ctx context.Context) error {
