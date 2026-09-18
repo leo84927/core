@@ -59,8 +59,12 @@ func (d DataSourceName) buildDB(ctx context.Context) (*sqlx.DB, error) {
 	db.SetConnMaxLifetime(d.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(d.ConnMaxIdleTime)
 
-	// 實際連線
-	if err := db.Ping(); err != nil {
+	/*
+	 * 實際連線。
+	 * 用 PingContext 而非 Ping：單次連線的上限若只來自 DSN 的 timeout，上游傳下來的 deadline
+	 * （gRPC 的、handler 自訂的）在冷連線上就完全失效，ADR-0002 讓 drain 不設上限的前提也跟著破掉
+	 */
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, permanentIfNeeded(ctx, err)
 	}
