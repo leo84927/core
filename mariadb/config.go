@@ -59,8 +59,7 @@ func (d DataSourceName) buildDB(ctx context.Context) (*sqlx.DB, error) {
 	db.SetConnMaxLifetime(d.ConnMaxLifetime)
 	db.SetConnMaxIdleTime(d.ConnMaxIdleTime)
 
-	// 實際連線
-	if err := db.Ping(); err != nil {
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, permanentIfNeeded(ctx, err)
 	}
