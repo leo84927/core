@@ -17,6 +17,17 @@ func permanentIfNeeded(ctx context.Context, err error) error {
 		return nil
 	}
 
+	/*
+	 * 呼叫端的 ctx 取消／到期：「還沒做完」而不是「做了但失敗」（見 docs/adr/0002 對 Nack 的討論）。
+	 * 不記 Error —— 關機時每一條還沒暖起來的連線都會走到這裡，那是預期中的收攤，不是故障。
+	 * err 原樣交回，不包 Permanent：backoff 在每次 operation 失敗後先問 ctx，結束了就回 context.Cause(ctx)。
+	 * 問的是 ctx 而不是 err 的型別：DSN 的 timeout 到期時，net 套件的撥號錯誤也可能
+	 * Is(context.DeadlineExceeded)，那是呼叫端還在等的網路逾時，必須照常重試並留下紀錄。
+	 */
+	if ctx.Err() != nil {
+		return err
+	}
+
 	// DSN 格式錯誤
 	if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
 		logger.Error(ctx, "dsn formatting error", err, "dsn", urlErr.URL)
