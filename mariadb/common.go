@@ -17,6 +17,15 @@ func permanentIfNeeded(ctx context.Context, err error) error {
 		return nil
 	}
 
+	/*
+	 * 呼叫端的 ctx 取消／到期 —— 「還沒做完」而不是「做了但失敗」。
+	 * 不記 Error —— 關機時每一條還沒暖起來的連線都會走到這裡，那是預期中的收攤，不是故障。
+	 * err 原樣交回，不包 Permanent —— backoff 在每次 operation 失敗後先問 ctx，結束了就回 context.Cause(ctx)。
+	 */
+	if ctx.Err() != nil {
+		return err
+	}
+
 	// DSN 格式錯誤
 	if urlErr := (*url.Error)(nil); errors.As(err, &urlErr) {
 		logger.Error(ctx, "dsn formatting error", err, "dsn", urlErr.URL)
