@@ -26,7 +26,10 @@ func (r *reader) rabbitMQ(serviceName string, keys *QueueKeys) RabbitMQ {
 	}
 	cfg.Topology.Exchange.Name = r.str(env.GlobalEnvKey_GLOBAL_RABBITMQ_JOB_EXCHANGE)
 
-	// 只是 producer 就只需要基本的 topology（宣告 exchange），不需要 queue binding 那幾個鍵
+	/*
+	 * 只當 producer 時不宣告任何 topology（initialize 只在有 MsgHandler 時才呼叫 InitTopology），
+	 * exchange 名稱只拿來當發布目標；kind、queue、binding 與宣告的重試預算都用不到
+	 */
 	if keys == nil {
 		return cfg
 	}
